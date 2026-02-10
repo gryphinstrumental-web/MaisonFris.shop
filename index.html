@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maison Fris — Luxury and Customs</title>
+    <meta name="description" content="Maison Fris — Luxury and Customs on CivMC">
+    <link rel="icon" type="image/png" href="2.png">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Raleway:wght@300;400;500&display=swap');
+
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #6e6e96;
+            --bg-dark: #5a5a80;
+            --text: #f0eef4;
+            --text-muted: #c4c0d4;
+            --accent: #b8b4cc;
+        }
+
+        body {
+            font-family: 'Raleway', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* subtle vignette */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(40, 40, 60, 0.4) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+            padding: 2rem;
+            animation: fadeIn 1.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            width: min(320px, 80vw);
+            filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.15));
+            animation: fadeIn 1.8s ease;
+        }
+
+        .divider {
+            width: 60px;
+            height: 1px;
+            background: var(--accent);
+            opacity: 0.6;
+        }
+
+        .tagline {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            font-weight: 300;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .status {
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.85rem;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a8d4a0;
+            box-shadow: 0 0 8px rgba(168, 212, 160, 0.6);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .links {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 2rem;
+            animation: fadeIn 2.2s ease;
+        }
+
+        .links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.8rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            transition: color 0.3s ease;
+            position: relative;
+        }
+
+        .links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--text);
+            transition: width 0.3s ease;
+        }
+
+        .links a:hover {
+            color: var(--text);
+        }
+
+        .links a:hover::after {
+            width: 100%;
+        }
+
+        footer {
+            position: fixed;
+            bottom: 1.5rem;
+            z-index: 1;
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="2.png" alt="Maison Fris" class="logo">
+
+        <div class="divider"></div>
+
+        <p class="tagline">Establishing a new standard on CivMC</p>
+
+        <div class="status">
+            <span class="status-dot"></span>
+            <span>Coming Soon</span>
+        </div>
+
+        <nav class="links">
+            <a href="https://reddit.com/r/CivMC" target="_blank" rel="noopener">CivMC</a>
+        </nav>
+    </div>
+
+    <footer>MAISON FRIS &copy; 2026</footer>
+</body>
+</html>
