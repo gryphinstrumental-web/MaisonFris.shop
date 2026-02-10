@@ -36,15 +36,6 @@
             position: relative;
         }
 
-        /* subtle vignette */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: radial-gradient(ellipse at center, transparent 50%, rgba(40, 40, 60, 0.4) 100%);
-            pointer-events: none;
-            z-index: 0;
-        }
 
         .container {
             position: relative;
