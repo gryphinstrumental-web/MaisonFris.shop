@@ -523,9 +523,13 @@ function openOrderForm(type, ticker, tiers, equityId) {
     document.getElementById('orderSummary').innerHTML = tierHTML;
     updateOrderTier(0);
 
-    // Auto-fill IGN from profile
+    // Auto-fill from profile
     const ignInput = document.getElementById('minecraftIGN');
-    if (ignInput && userProfile?.minecraft_ign) ignInput.value = userProfile.minecraft_ign;
+    if (ignInput) ignInput.value = userProfile?.minecraft_ign || '';
+    const nationInput = document.getElementById('orderNation');
+    if (nationInput) nationInput.value = userProfile?.nation || '';
+    const mbInput = document.getElementById('orderMB');
+    if (mbInput) mbInput.value = userProfile?.monument_bank || '';
 
     orderModal.classList.add('active');
 }
@@ -560,8 +564,9 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const ign = document.getElementById('minecraftIGN').value;
+    const nation = document.getElementById('orderNation').value;
+    const mbAccount = document.getElementById('orderMB').value;
     const quantity = document.getElementById('quantity').value;
-    const mbAccount = userProfile?.monument_bank || '';
 
     if (!currentOrder.selectedTier) { alert('Please select a price tier'); return; }
     if (parseInt(quantity) > currentOrder.selectedTier.qty) {
@@ -584,6 +589,18 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
         });
         const order = rows[0];
 
+        // Update profile if any fields changed
+        const profileUpdates = {};
+        if (ign && ign !== (userProfile?.minecraft_ign || '')) profileUpdates.minecraft_ign = ign;
+        if (nation && nation !== (userProfile?.nation || '')) profileUpdates.nation = nation;
+        if (mbAccount && mbAccount !== (userProfile?.monument_bank || '')) profileUpdates.monument_bank = mbAccount;
+        if (Object.keys(profileUpdates).length > 0) {
+            fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+                method: 'PATCH', headers: restHeaders(), body: JSON.stringify(profileUpdates)
+            }).catch(err => console.warn('Profile update failed:', err));
+            userProfile = { ...userProfile, ...profileUpdates };
+        }
+
         fetch(CONFIG.discordWebhook, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -599,7 +616,8 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
                         { name: 'Quantity', value: quantity, inline: true },
                         { name: 'Total Value', value: `$${total}`, inline: true },
                         { name: 'Discord', value: discordName, inline: true },
-                        { name: 'Minecraft IGN', value: ign, inline: true },
+                        { name: 'Minecraft IGN', value: ign || 'Not set', inline: true },
+                        { name: 'Nation', value: nation || 'Not set', inline: true },
                         { name: 'Monument Bank', value: mbAccount || 'Not set', inline: true }
                     ],
                     timestamp: new Date().toISOString(),
@@ -608,13 +626,13 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
             })
         }).catch(err => console.warn('Discord webhook failed:', err));
 
-        alert('Order submitted! You will be notified via Discord when it is approved.');
+        alert('Order Sent. Maison Fris will be in touch.');
         orderModal.classList.remove('active');
         document.getElementById('orderForm').reset();
 
     } catch (error) {
         console.error('Error submitting order:', error);
-        alert('Error submitting order: ' + error.message);
+        alert('Error. Contact @grphon_the on discord for help with this order. Please include all details.');
     }
 });
 

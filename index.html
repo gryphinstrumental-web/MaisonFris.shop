@@ -939,19 +939,19 @@
             <div class="exchange-header">
                 <h1>Profile</h1>
             </div>
-            <div class="order-form" style="box-shadow: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(184,180,204,0.1); border-radius: 10px;">
+            <div class="order-form" style="box-shadow: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(184,180,204,0.1); border-radius: 10px; text-align: center;">
                 <form id="profileForm" onsubmit="saveProfile(event)">
                     <div class="form-group">
-                        <label for="profileIGN">Minecraft IGN</label>
-                        <input type="text" id="profileIGN" placeholder="Your in-game name">
+                        <label for="profileIGN" style="text-align:center;">Minecraft IGN</label>
+                        <input type="text" id="profileIGN" placeholder="Your in-game name" style="text-align:center;">
                     </div>
                     <div class="form-group">
-                        <label for="profileNation">Nation</label>
-                        <input type="text" id="profileNation" placeholder="Your nation">
+                        <label for="profileNation" style="text-align:center;">Nation</label>
+                        <input type="text" id="profileNation" placeholder="Your nation" style="text-align:center;">
                     </div>
                     <div class="form-group">
-                        <label for="profileMB">Monument Bank Account</label>
-                        <input type="text" id="profileMB" placeholder="HS-XXXX">
+                        <label for="profileMB" style="text-align:center;">Monument Bank Account</label>
+                        <input type="text" id="profileMB" placeholder="HS-XXXX" maxlength="7" style="text-align:center;">
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="submit-btn">Save Profile</button>
@@ -976,6 +976,16 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="orderNation">Nation</label>
+                    <input type="text" id="orderNation" placeholder="Your nation">
+                </div>
+
+                <div class="form-group">
+                    <label for="orderMB">Monument Bank Sort Code</label>
+                    <input type="text" id="orderMB" placeholder="HS-XXXX" maxlength="7">
+                </div>
+
+                <div class="form-group">
                     <label for="quantity">Quantity * <span id="maxQtyLabel" style="color: var(--text-muted); font-weight: 300;"></span></label>
                     <input type="number" id="quantity" required min="1" placeholder="Number of shares" oninput="validateQuantity()">
                 </div>
@@ -988,6 +998,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=13"></script>
 </body>
 </html>
