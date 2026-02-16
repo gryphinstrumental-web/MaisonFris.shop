@@ -125,6 +125,7 @@ async function checkAdmin() {
     if (!currentUser) { isAdmin = false; return; }
     try {
         const rows = await supabaseRest('profiles', `select=is_admin&id=eq.${currentUser.id}`);
+        console.log('Admin check:', rows);
         isAdmin = rows?.[0]?.is_admin || false;
     } catch (e) {
         console.error('checkAdmin failed:', e);
