@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <script>
         // Redirect all paths back to index.html for SPA routing
-        // Preserve hash fragment (contains Supabase auth tokens after OAuth)
+        // Preserve query string (PKCE code) and hash fragment (implicit tokens)
         sessionStorage.setItem('redirect', window.location.pathname);
-        window.location.replace('/' + window.location.hash);
+        window.location.replace('/' + window.location.search + window.location.hash);
     </script>
 </head>
 <body></body>
