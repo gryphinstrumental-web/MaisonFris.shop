@@ -19,90 +19,43 @@ const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
 });
 
 let currentUser = null;
+let currentAccessToken = null;
 let isAdmin = false;
 
 // ============================================
-// Direct REST helper (bypasses Supabase JS client for data queries)
+// Direct REST helpers (fully bypass Supabase JS client for data)
 // ============================================
-async function supabaseRest(table, params = '') {
-    const url = `${CONFIG.supabaseUrl}/rest/v1/${table}?${params}`;
-    const headers = {
+function restHeaders() {
+    const token = currentAccessToken || CONFIG.supabaseKey;
+    return {
         'apikey': CONFIG.supabaseKey,
-        'Authorization': `Bearer ${CONFIG.supabaseKey}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
     };
+}
 
-    // If we have an active session, use the user's token instead
-    const { data: { session } } = await sb.auth.getSession();
-    if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-
-    const resp = await fetch(url, { headers });
-    if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`Supabase REST ${resp.status}: ${body}`);
-    }
+async function supabaseRest(table, params = '') {
+    const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}?${params}`, { headers: restHeaders() });
+    if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
     return resp.json();
 }
 
 async function supabaseInsert(table, row) {
-    const url = `${CONFIG.supabaseUrl}/rest/v1/${table}`;
-    const headers = {
-        'apikey': CONFIG.supabaseKey,
-        'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-    };
-    const { data: { session } } = await sb.auth.getSession();
-    if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(row) });
-    if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`Supabase REST ${resp.status}: ${body}`);
-    }
+    const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}`, { method: 'POST', headers: restHeaders(), body: JSON.stringify(row) });
+    if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
     return resp.json();
 }
 
 async function supabaseUpdate(table, id, updates) {
-    const url = `${CONFIG.supabaseUrl}/rest/v1/${table}?id=eq.${id}`;
-    const headers = {
-        'apikey': CONFIG.supabaseKey,
-        'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-    };
-    const { data: { session } } = await sb.auth.getSession();
-    if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    const resp = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(updates) });
-    if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`Supabase REST ${resp.status}: ${body}`);
-    }
+    const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}?id=eq.${id}`, { method: 'PATCH', headers: restHeaders(), body: JSON.stringify(updates) });
+    if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
     return resp.json();
 }
 
 async function supabaseDelete(table, id) {
-    const url = `${CONFIG.supabaseUrl}/rest/v1/${table}?id=eq.${id}`;
-    const headers = {
-        'apikey': CONFIG.supabaseKey,
-        'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        'Content-Type': 'application/json'
-    };
-    const { data: { session } } = await sb.auth.getSession();
-    if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    const resp = await fetch(url, { method: 'DELETE', headers });
-    if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`Supabase REST ${resp.status}: ${body}`);
-    }
+    const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}?id=eq.${id}`, { method: 'DELETE', headers: restHeaders() });
+    if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
 }
 
 // ============================================
@@ -209,6 +162,7 @@ async function loginWithDiscord() {
 async function logoutUser() {
     await sb.auth.signOut();
     currentUser = null;
+    currentAccessToken = null;
     isAdmin = false;
     updateAuthUI();
 }
@@ -224,6 +178,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     const isFirstEvent = !authResolved;
     authResolved = true;
     currentUser = session?.user || null;
+    currentAccessToken = session?.access_token || null;
 
     // Navigate immediately so page isn't blank
     if (isFirstEvent) {
