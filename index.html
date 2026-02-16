@@ -997,7 +997,13 @@
         };
 
         // Initialize Supabase
-        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true
+            }
+        });
         let currentUser = null;
         let isAdmin = false;
 
