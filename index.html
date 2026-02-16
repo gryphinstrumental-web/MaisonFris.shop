@@ -995,8 +995,10 @@
             discordWebhook: 'https://discord.com/api/webhooks/1472730251372003474/aWcIylD6Ew7gOI1KyCLToj8aQfd7hsDJ8YqUdxniBmxSFaa_YwGAQKqwZH-gQEPLUv7Y'
         };
 
-        // Initialize Supabase
-        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+        // Initialize Supabase (implicit flow works with GitHub Pages SPA redirects)
+        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+            auth: { flowType: 'implicit' }
+        });
         let currentUser = null;
         let isAdmin = false;
 
