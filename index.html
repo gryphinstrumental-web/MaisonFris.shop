@@ -995,10 +995,8 @@
             discordWebhook: 'https://discord.com/api/webhooks/1472730251372003474/aWcIylD6Ew7gOI1KyCLToj8aQfd7hsDJ8YqUdxniBmxSFaa_YwGAQKqwZH-gQEPLUv7Y'
         };
 
-        // Initialize Supabase (implicit flow works with GitHub Pages SPA redirects)
-        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
-            auth: { flowType: 'implicit' }
-        });
+        // Initialize Supabase
+        const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
         let currentUser = null;
         let isAdmin = false;
 
@@ -1048,8 +1046,8 @@
 
         window.addEventListener('popstate', navigate);
 
-        // Detect OAuth callback — tokens are in the hash fragment (implicit flow)
-        const isAuthCallback = window.location.hash.includes('access_token');
+        // Detect OAuth callback — PKCE uses ?code= in query, implicit uses #access_token in hash
+        const isAuthCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token');
 
         // Handle SPA redirect from 404.html (only when NOT an auth callback)
         const redirectPath = sessionStorage.getItem('redirect');
