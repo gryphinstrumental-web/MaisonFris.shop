@@ -525,24 +525,89 @@
 
 
         @media (max-width: 600px) {
-            .equity-card-body {
-                grid-template-columns: 1fr;
+            .orderbook-page {
+                padding: 1rem 0.5rem;
             }
-            .book-side.bid {
-                border-left: none;
-                border-top: 1px solid rgba(184, 180, 204, 0.1);
+            .exchange-content {
+                padding: 1rem 0.25rem;
+                margin: 1rem auto;
             }
-            .book-side {
-                padding: 0.75rem 1.25rem 1rem;
+            .exchange-header {
+                margin-bottom: 1.5rem;
             }
-            .equity-card-header {
-                padding: 1.25rem 1.25rem 0.5rem;
+            .exchange-header h1 {
+                font-size: 1.4rem;
+                letter-spacing: 0.1em;
             }
-            .equity-card-header .ticker-display {
-                font-size: 1.6rem;
+            .search-bar {
+                margin: 0 0.5rem 1.5rem;
+            }
+            .search-bar input {
+                font-size: 0.8rem;
+                padding: 0.6rem 0.75rem;
+            }
+            .carousel-wrapper {
+                gap: 0;
             }
             .carousel-arrow {
-                font-size: 1.4rem;
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 5;
+                font-size: 1.6rem;
+                padding: 1rem 0.5rem;
+                background: rgba(100, 110, 150, 0.6);
+                border-radius: 4px;
+            }
+            .carousel-arrow#arrowLeft {
+                left: 0.25rem;
+            }
+            .carousel-arrow#arrowRight {
+                right: 0.25rem;
+            }
+            .carousel-stage {
+                padding: 0 0.25rem;
+            }
+            .equity-card {
+                max-width: 100%;
+            }
+            .equity-card-header {
+                padding: 1rem 1rem 0.5rem;
+            }
+            .equity-card-header .ticker-display {
+                font-size: 1.5rem;
+            }
+            .equity-card-header .company-name {
+                font-size: 0.7rem;
+            }
+            .equity-card-body {
+                grid-template-columns: 1fr 1fr;
+            }
+            .book-side {
+                padding: 0.75rem 0.75rem 1rem;
+            }
+            .book-side.bid {
+                border-left: 1px solid rgba(184, 180, 204, 0.1);
+            }
+            .book-side-label {
+                font-size: 0.6rem;
+                margin-bottom: 0.5rem;
+            }
+            .book-offer .offer-info .price {
+                font-size: 0.9rem;
+            }
+            .book-offer .offer-info .qty {
+                font-size: 0.65rem;
+            }
+            .book-offer button {
+                padding: 0.4rem 0.9rem;
+                font-size: 0.65rem;
+            }
+            .book-offer {
+                gap: 0.5rem;
+            }
+            .book-empty {
+                font-size: 0.7rem;
             }
         }
 
@@ -879,6 +944,123 @@
             font-weight: 500;
         }
 
+        /* Order History */
+        .order-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .order-history-item {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(184, 180, 204, 0.1);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            transition: background 0.2s ease;
+        }
+
+        .order-history-item:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .oh-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .oh-row + .oh-row {
+            margin-top: 0.5rem;
+        }
+
+        .oh-ticker {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .oh-side {
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+        }
+
+        .oh-side.buy {
+            background: rgba(168, 212, 160, 0.15);
+            color: #a8d4a0;
+        }
+
+        .oh-side.sell {
+            background: rgba(212, 160, 160, 0.15);
+            color: #d4a0a0;
+        }
+
+        .oh-status {
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            margin-left: auto;
+        }
+
+        .oh-status.pending {
+            background: rgba(204, 196, 130, 0.15);
+            color: #ccc482;
+        }
+
+        .oh-status.approved {
+            background: rgba(168, 212, 160, 0.15);
+            color: #a8d4a0;
+        }
+
+        .oh-status.rejected, .oh-status.cancelled {
+            background: rgba(212, 160, 160, 0.15);
+            color: #d4a0a0;
+        }
+
+        .oh-details {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .oh-details span + span::before {
+            content: '\00b7';
+            margin: 0 0.5rem;
+            opacity: 0.5;
+        }
+
+        .oh-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+
+        .oh-meta span + span::before {
+            content: '\00b7';
+            margin: 0 0.4rem;
+            opacity: 0.5;
+        }
+
+        .order-history-item.filtered-out {
+            display: none;
+        }
+
+        #profileForm input[readonly] {
+            background: transparent;
+            border-color: transparent;
+            cursor: default;
+            opacity: 0.85;
+        }
+
         footer {
             position: fixed;
             bottom: 1.5rem;
@@ -902,7 +1084,8 @@
     <div class="side-menu" id="sideMenu">
         <nav>
             <a href="/home" onclick="navigateTo('/home'); return false;">Home</a>
-            <a href="/orderbook" onclick="navigateTo('/orderbook'); return false;">Pavian Exchange Orderbook</a>
+            <a href="/orderbook" onclick="navigateTo('/orderbook'); return false;">Orderbook</a>
+            <a href="/orderhistory" id="orderHistoryLink" onclick="navigateTo('/orderhistory'); return false;" style="display:none;">Order History</a>
             <a href="/profile" id="profileLink" onclick="navigateTo('/profile'); return false;" style="display:none;">Profile</a>
         </nav>
         <div class="auth-bar" id="authBar">
@@ -923,7 +1106,8 @@
         <div class="exchange-content">
 
             <div class="exchange-header">
-                <h1>Pavian Exchange Orderbook</h1>
+                <h1>Maison Fris Orderbook</h1>
+                <p style="font-size: 0.8rem; letter-spacing: 0.1em; color: var(--text-muted); margin-top: 0.25rem;">All shares trade on the Pavian Stock Exchange</p>
                 <button id="adminViewToggle" class="admin-view-toggle" style="display:none;" onclick="toggleAdminView()">Client View</button>
             </div>
             <div class="search-bar">
@@ -943,22 +1127,45 @@
                 <form id="profileForm" onsubmit="saveProfile(event)">
                     <div class="form-group">
                         <label for="profileIGN" style="text-align:center;">Minecraft IGN</label>
-                        <input type="text" id="profileIGN" placeholder="Your in-game name" style="text-align:center;">
+                        <input type="text" id="profileIGN" placeholder="Your in-game name" style="text-align:center;" readonly>
                     </div>
                     <div class="form-group">
                         <label for="profileNation" style="text-align:center;">Nation</label>
-                        <input type="text" id="profileNation" placeholder="Your nation" style="text-align:center;">
+                        <input type="text" id="profileNation" placeholder="Your nation" style="text-align:center;" readonly>
                     </div>
                     <div class="form-group">
                         <label for="profileMB" style="text-align:center;">Monument Bank Account</label>
-                        <input type="text" id="profileMB" placeholder="HS-XXXX" maxlength="7" style="text-align:center;">
+                        <input type="text" id="profileMB" placeholder="HS-XXXX" maxlength="7" style="text-align:center;" readonly>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="submit-btn">Save Profile</button>
+                        <button type="button" class="submit-btn" id="profileEditBtn" onclick="toggleProfileEdit()">Edit Profile</button>
+                        <button type="submit" class="submit-btn" id="profileSaveBtn" style="display:none;">Save Profile</button>
                     </div>
                 </form>
                 <div id="profileSaveMsg" style="text-align:center; margin-top:1rem; font-size:0.8rem; color:#a8d4a0; display:none;">Profile saved!</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Order History View -->
+    <div class="view orderbook-page" id="orderHistoryView">
+        <div class="exchange-content" style="max-width: 750px;">
+            <div class="exchange-header">
+                <h1>Order History</h1>
+            </div>
+            <div class="search-bar">
+                <input type="text" id="orderHistorySearch" placeholder="Search by ticker, status, user...">
+            </div>
+            <div id="orderHistoryData" class="loading">Loading orders...</div>
+        </div>
+    </div>
+
+    <!-- Login Gate Modal -->
+    <div class="order-modal" id="loginGateModal">
+        <div class="order-form" style="text-align: center;">
+            <h2 style="margin-bottom: 1rem;">Welcome</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 2rem;">For order routing purposes, please log in with Discord before placing an order.</p>
+            <button class="submit-btn" onclick="loginWithDiscord()" style="width: 100%; padding: 0.75rem; border: 1px solid rgba(88, 101, 242, 0.5); border-radius: 4px; background: rgba(88, 101, 242, 0.2); color: var(--text); font-family: 'Raleway', sans-serif; font-size: 0.85rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.3s ease;">Sign in with Discord</button>
         </div>
     </div>
 
@@ -998,6 +1205,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=13"></script>
+    <script src="app.js?v=19"></script>
 </body>
 </html>

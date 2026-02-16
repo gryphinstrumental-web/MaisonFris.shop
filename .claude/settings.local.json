@@ -12,7 +12,8 @@
       "Bash(dir:*)",
       "Bash(dir \"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\")",
       "Bash(dir \"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\")",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "WebFetch(domain:maisonfris.shop)"
     ]
   }
 }

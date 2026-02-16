@@ -94,12 +94,32 @@ function navigate() {
     if (path === '/orderbook') {
         document.getElementById('orderbookView').classList.add('active');
         document.body.classList.remove('landing');
+        if (!currentUser) {
+            document.getElementById('loginGateModal').classList.add('active');
+        } else {
+            document.getElementById('loginGateModal').classList.remove('active');
+        }
         loadEquities();
+    } else if (path === '/orderhistory') {
+        if (!currentUser) {
+            history.replaceState(null, '', '/home');
+            document.getElementById('landingView').classList.add('active');
+            document.body.classList.add('landing');
+            return;
+        }
+        document.getElementById('orderHistoryView').classList.add('active');
+        document.body.classList.remove('landing');
+        loadOrderHistory();
     } else if (path === '/profile') {
-        if (!currentUser) { history.replaceState(null, '', '/home'); }
+        if (!currentUser) {
+            history.replaceState(null, '', '/home');
+            document.getElementById('landingView').classList.add('active');
+            document.body.classList.add('landing');
+            return;
+        }
         document.getElementById('profileView').classList.add('active');
         document.body.classList.remove('landing');
-        fillProfileForm();
+        loadProfile().then(() => fillProfileForm());
     } else if (path === '/home') {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
@@ -159,9 +179,11 @@ function updateAuthUI() {
     const comeInBtn = document.getElementById('comeInBtn');
     if (comeInBtn) comeInBtn.style.display = currentUser ? 'none' : '';
 
-    // Show/hide profile link
+    // Show/hide logged-in nav links
     const profileLink = document.getElementById('profileLink');
     if (profileLink) profileLink.style.display = currentUser ? '' : 'none';
+    const orderHistoryLink = document.getElementById('orderHistoryLink');
+    if (orderHistoryLink) orderHistoryLink.style.display = currentUser ? '' : 'none';
 
     // Show/hide admin view toggle
     const toggleBtn = document.getElementById('adminViewToggle');
@@ -170,7 +192,11 @@ function updateAuthUI() {
         toggleBtn.textContent = adminViewMode ? 'Client View' : 'Admin View';
     }
 
-    if (window.location.pathname === '/orderbook') loadEquities();
+    if (window.location.pathname === '/orderbook') {
+        const gate = document.getElementById('loginGateModal');
+        if (gate) gate.classList.toggle('active', !currentUser);
+        loadEquities();
+    }
 }
 
 function toggleAdminView() {
@@ -218,6 +244,21 @@ function fillProfileForm() {
     if (ign) ign.value = userProfile.minecraft_ign || '';
     if (nation) nation.value = userProfile.nation || '';
     if (mb) mb.value = userProfile.monument_bank || '';
+    setProfileEditable(false);
+}
+
+function setProfileEditable(editable) {
+    const inputs = document.querySelectorAll('#profileForm input[type="text"]');
+    inputs.forEach(i => { if (editable) i.removeAttribute('readonly'); else i.setAttribute('readonly', ''); });
+    const editBtn = document.getElementById('profileEditBtn');
+    const saveBtn = document.getElementById('profileSaveBtn');
+    if (editBtn) editBtn.style.display = editable ? 'none' : '';
+    if (saveBtn) saveBtn.style.display = editable ? '' : 'none';
+}
+
+function toggleProfileEdit() {
+    setProfileEditable(true);
+    document.getElementById('profileIGN')?.focus();
 }
 
 async function saveProfile(e) {
@@ -235,6 +276,7 @@ async function saveProfile(e) {
             method: 'PATCH', headers: restHeaders(), body: JSON.stringify(data)
         });
         userProfile = { ...userProfile, ...data };
+        setProfileEditable(false);
         const msg = document.getElementById('profileSaveMsg');
         if (msg) { msg.style.display = 'block'; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
     } catch (err) {
@@ -242,6 +284,78 @@ async function saveProfile(e) {
         alert('Error saving profile: ' + err.message);
     }
 }
+
+// ============================================
+// Order History
+// ============================================
+async function loadOrderHistory() {
+    const container = document.getElementById('orderHistoryData');
+    container.innerHTML = '<p class="loading">Loading orders...</p>';
+
+    try {
+        let params, orders;
+        if (isAdmin) {
+            params = 'select=*,equities(ticker,company_name),profiles(discord_username)&order=created_at.desc';
+            orders = await supabaseRest('orders', params);
+        } else {
+            params = `select=*,equities(ticker,company_name)&user_id=eq.${currentUser.id}&order=created_at.desc`;
+            orders = await supabaseRest('orders', params);
+        }
+
+        if (!orders || orders.length === 0) {
+            container.innerHTML = '<p class="loading">No orders yet.</p>';
+            return;
+        }
+
+        let html = '<div class="order-history-list">';
+        orders.forEach(order => {
+            const date = new Date(order.created_at).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            const total = (Number(order.price) * order.quantity).toFixed(2);
+            const ticker = order.equities?.ticker || 'Unknown';
+            const company = order.equities?.company_name || '';
+            const discordUser = order.profiles?.discord_username || '';
+
+            const searchStr = [
+                ticker, company, order.side, order.status,
+                order.minecraft_ign || '', discordUser
+            ].join(' ').toLowerCase();
+
+            html += `
+                <div class="order-history-item" data-search="${searchStr.replace(/"/g, '&quot;')}">
+                    <div class="oh-row">
+                        <span class="oh-ticker">${ticker}</span>
+                        <span class="oh-side ${order.side}">${order.side.toUpperCase()}</span>
+                        <span class="oh-status ${order.status}">${order.status}</span>
+                    </div>
+                    <div class="oh-row oh-details">
+                        <span>${order.quantity} @ $${Number(order.price)}</span>
+                        <span>Total: $${total}</span>
+                    </div>
+                    <div class="oh-row oh-meta">
+                        ${isAdmin && discordUser ? `<span>${discordUser}</span>` : ''}
+                        ${order.minecraft_ign ? `<span>IGN: ${order.minecraft_ign}</span>` : ''}
+                        <span>${date}</span>
+                    </div>
+                </div>`;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('Error loading order history:', error);
+        container.innerHTML = `<p class="loading">Error loading orders: ${error.message}</p>`;
+    }
+}
+
+document.getElementById('orderHistorySearch').addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('.order-history-item').forEach(item => {
+        const match = !query || (item.dataset.search || '').includes(query);
+        item.classList.toggle('filtered-out', !match);
+    });
+});
 
 // ============================================
 // Auth state — single source of truth
