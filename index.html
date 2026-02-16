@@ -903,6 +903,7 @@
         <nav>
             <a href="/home" onclick="navigateTo('/home'); return false;">Home</a>
             <a href="/orderbook" onclick="navigateTo('/orderbook'); return false;">Pavian Exchange Orderbook</a>
+            <a href="/profile" id="profileLink" onclick="navigateTo('/profile'); return false;" style="display:none;">Profile</a>
         </nav>
         <div class="auth-bar" id="authBar">
             <button class="login-btn" id="loginBtn" onclick="loginWithDiscord()">Sign in</button>
@@ -932,6 +933,35 @@
         </div>
     </div>
 
+    <!-- Profile Page View -->
+    <div class="view orderbook-page" id="profileView">
+        <div class="exchange-content" style="max-width: 500px;">
+            <div class="exchange-header">
+                <h1>Profile</h1>
+            </div>
+            <div class="order-form" style="box-shadow: none; background: rgba(255,255,255,0.04); border: 1px solid rgba(184,180,204,0.1); border-radius: 10px;">
+                <form id="profileForm" onsubmit="saveProfile(event)">
+                    <div class="form-group">
+                        <label for="profileIGN">Minecraft IGN</label>
+                        <input type="text" id="profileIGN" placeholder="Your in-game name">
+                    </div>
+                    <div class="form-group">
+                        <label for="profileNation">Nation</label>
+                        <input type="text" id="profileNation" placeholder="Your nation">
+                    </div>
+                    <div class="form-group">
+                        <label for="profileMB">Monument Bank Account</label>
+                        <input type="text" id="profileMB" placeholder="HS-XXXX">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">Save Profile</button>
+                    </div>
+                </form>
+                <div id="profileSaveMsg" style="text-align:center; margin-top:1rem; font-size:0.8rem; color:#a8d4a0; display:none;">Profile saved!</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Order Form Modal -->
     <div class="order-modal" id="orderModal">
         <div class="order-form">
@@ -950,11 +980,6 @@
                     <input type="number" id="quantity" required min="1" placeholder="Number of shares" oninput="validateQuantity()">
                 </div>
 
-                <div class="form-group">
-                    <label for="notes">Additional Notes</label>
-                    <textarea id="notes" rows="3" placeholder="Optional notes or questions..."></textarea>
-                </div>
-
                 <div class="form-actions">
                     <button type="button" class="cancel-btn" id="cancelOrder">Cancel</button>
                     <button type="submit" class="submit-btn">Submit Order</button>
@@ -963,6 +988,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
 </body>
 </html>

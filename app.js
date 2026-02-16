@@ -22,6 +22,7 @@ let currentUser = null;
 let currentAccessToken = null;
 let isAdmin = false;
 let adminViewMode = true; // true = admin editing, false = client preview
+let userProfile = null;
 
 // ============================================
 // Direct REST helpers (fully bypass Supabase JS client for data)
@@ -94,6 +95,11 @@ function navigate() {
         document.getElementById('orderbookView').classList.add('active');
         document.body.classList.remove('landing');
         loadEquities();
+    } else if (path === '/profile') {
+        if (!currentUser) { history.replaceState(null, '', '/home'); }
+        document.getElementById('profileView').classList.add('active');
+        document.body.classList.remove('landing');
+        fillProfileForm();
     } else if (path === '/home') {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
@@ -153,6 +159,10 @@ function updateAuthUI() {
     const comeInBtn = document.getElementById('comeInBtn');
     if (comeInBtn) comeInBtn.style.display = currentUser ? 'none' : '';
 
+    // Show/hide profile link
+    const profileLink = document.getElementById('profileLink');
+    if (profileLink) profileLink.style.display = currentUser ? '' : 'none';
+
     // Show/hide admin view toggle
     const toggleBtn = document.getElementById('adminViewToggle');
     if (toggleBtn) {
@@ -187,6 +197,53 @@ async function logoutUser() {
 }
 
 // ============================================
+// Profile
+// ============================================
+async function loadProfile() {
+    if (!currentUser) { userProfile = null; return; }
+    try {
+        const rows = await supabaseRest('profiles', `select=*&id=eq.${currentUser.id}`);
+        userProfile = rows?.[0] || null;
+    } catch (e) {
+        console.error('loadProfile failed:', e);
+        userProfile = null;
+    }
+}
+
+function fillProfileForm() {
+    if (!userProfile) return;
+    const ign = document.getElementById('profileIGN');
+    const nation = document.getElementById('profileNation');
+    const mb = document.getElementById('profileMB');
+    if (ign) ign.value = userProfile.minecraft_ign || '';
+    if (nation) nation.value = userProfile.nation || '';
+    if (mb) mb.value = userProfile.monument_bank || '';
+}
+
+async function saveProfile(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const data = {
+        minecraft_ign: document.getElementById('profileIGN').value.trim() || null,
+        nation: document.getElementById('profileNation').value.trim() || null,
+        monument_bank: document.getElementById('profileMB').value.trim() || null
+    };
+
+    try {
+        await fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+            method: 'PATCH', headers: restHeaders(), body: JSON.stringify(data)
+        });
+        userProfile = { ...userProfile, ...data };
+        const msg = document.getElementById('profileSaveMsg');
+        if (msg) { msg.style.display = 'block'; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
+    } catch (err) {
+        console.error('saveProfile error:', err);
+        alert('Error saving profile: ' + err.message);
+    }
+}
+
+// ============================================
 // Auth state — single source of truth
 // ============================================
 let authResolved = false;
@@ -210,8 +267,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
         navigate();
     }
 
-    // Then check admin and update UI
+    // Then check admin, load profile, and update UI
     await checkAdmin();
+    await loadProfile();
     updateAuthUI();
 });
 
@@ -464,6 +522,11 @@ function openOrderForm(type, ticker, tiers, equityId) {
 
     document.getElementById('orderSummary').innerHTML = tierHTML;
     updateOrderTier(0);
+
+    // Auto-fill IGN from profile
+    const ignInput = document.getElementById('minecraftIGN');
+    if (ignInput && userProfile?.minecraft_ign) ignInput.value = userProfile.minecraft_ign;
+
     orderModal.classList.add('active');
 }
 
@@ -498,7 +561,7 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
 
     const ign = document.getElementById('minecraftIGN').value;
     const quantity = document.getElementById('quantity').value;
-    const notes = document.getElementById('notes').value;
+    const mbAccount = userProfile?.monument_bank || '';
 
     if (!currentOrder.selectedTier) { alert('Please select a price tier'); return; }
     if (parseInt(quantity) > currentOrder.selectedTier.qty) {
@@ -517,7 +580,7 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
             price: currentOrder.selectedTier.price,
             quantity: parseInt(quantity),
             minecraft_ign: ign,
-            notes: notes || null
+            monument_bank: mbAccount || null
         });
         const order = rows[0];
 
@@ -537,7 +600,7 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
                         { name: 'Total Value', value: `$${total}`, inline: true },
                         { name: 'Discord', value: discordName, inline: true },
                         { name: 'Minecraft IGN', value: ign, inline: true },
-                        { name: 'Notes', value: notes || 'None', inline: false }
+                        { name: 'Monument Bank', value: mbAccount || 'Not set', inline: true }
                     ],
                     timestamp: new Date().toISOString(),
                     footer: { text: 'Pavian Exchange — Approve in Supabase dashboard' }
