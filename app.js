@@ -135,21 +135,12 @@ let authResolved = false;
 sb.auth.onAuthStateChange(async (event, session) => {
     console.log('Auth event:', event, session ? 'has session' : 'no session');
 
-    // Mark resolved IMMEDIATELY so the timeout doesn't double-navigate
     const isFirstEvent = !authResolved;
     authResolved = true;
 
     currentUser = session?.user || null;
 
-    try {
-        await checkAdmin();
-    } catch (e) {
-        console.error('checkAdmin failed:', e);
-        isAdmin = false;
-    }
-
-    updateAuthUI();
-
+    // Navigate IMMEDIATELY so the page isn't blank while we check admin
     if (isFirstEvent) {
         if (event === 'SIGNED_IN' && isAuthCallback) {
             history.replaceState(null, '', '/orderbook');
@@ -159,6 +150,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
         history.replaceState(null, '', '/orderbook');
         navigate();
     }
+
+    // Check admin + update UI after navigation (re-renders with admin controls if needed)
+    try {
+        await checkAdmin();
+    } catch (e) {
+        console.error('checkAdmin failed:', e);
+        isAdmin = false;
+    }
+
+    updateAuthUI();
 });
 
 // Safety net: if onAuthStateChange never fires, navigate after 3s
