@@ -275,6 +275,7 @@
         .exchange-header {
             text-align: center;
             margin-bottom: 3rem;
+            position: relative;
         }
 
         .exchange-header h1 {
@@ -381,8 +382,12 @@
             border: 1px solid rgba(184, 180, 204, 0.1);
             border-radius: 10px;
             overflow: hidden;
-            transition: background 0.3s ease, border-color 0.3s ease;
+            transition: background 0.3s ease, border-color 0.3s ease, max-width 0.3s ease;
             animation: cardFadeIn 0.3s ease;
+        }
+
+        .equity-card.admin-card {
+            max-width: 680px;
         }
 
         .equity-card.active-card {
@@ -653,15 +658,37 @@
         }
 
         .admin-inline-input {
-            width: 80px;
+            width: 70px;
             padding: 0.25rem 0.4rem;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(184, 180, 204, 0.3);
             border-radius: 3px;
             color: var(--text);
             font-family: 'Raleway', sans-serif;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             text-align: center;
+        }
+
+        .admin-view-toggle {
+            position: absolute;
+            top: 0.5rem;
+            right: 0;
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.3);
+            border-radius: 4px;
+            color: var(--text-muted);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.35rem 0.75rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .admin-view-toggle:hover {
+            border-color: var(--accent);
+            color: var(--text);
         }
 
         .admin-inline-input:focus {
@@ -672,14 +699,15 @@
         .admin-offer-row {
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 0.3rem;
             margin-bottom: 0.5rem;
         }
 
         .admin-offer-row label {
             font-size: 0.65rem;
             color: var(--text-muted);
-            min-width: 28px;
+            min-width: 14px;
+            text-align: right;
         }
 
         .admin-actions {
@@ -895,6 +923,7 @@
 
             <div class="exchange-header">
                 <h1>Pavian Exchange Orderbook</h1>
+                <button id="adminViewToggle" class="admin-view-toggle" style="display:none;" onclick="toggleAdminView()">Client View</button>
             </div>
             <div class="search-bar">
                 <input type="text" id="searchInput" placeholder="Search by ticker or company name...">
@@ -934,6 +963,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>

@@ -21,6 +21,7 @@ const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
 let currentUser = null;
 let currentAccessToken = null;
 let isAdmin = false;
+let adminViewMode = true; // true = admin editing, false = client preview
 
 // ============================================
 // Direct REST helpers (fully bypass Supabase JS client for data)
@@ -151,7 +152,22 @@ function updateAuthUI() {
     }
     const comeInBtn = document.getElementById('comeInBtn');
     if (comeInBtn) comeInBtn.style.display = currentUser ? 'none' : '';
+
+    // Show/hide admin view toggle
+    const toggleBtn = document.getElementById('adminViewToggle');
+    if (toggleBtn) {
+        toggleBtn.style.display = isAdmin ? '' : 'none';
+        toggleBtn.textContent = adminViewMode ? 'Client View' : 'Admin View';
+    }
+
     if (window.location.pathname === '/orderbook') loadEquities();
+}
+
+function toggleAdminView() {
+    adminViewMode = !adminViewMode;
+    const toggleBtn = document.getElementById('adminViewToggle');
+    if (toggleBtn) toggleBtn.textContent = adminViewMode ? 'Client View' : 'Admin View';
+    loadEquities();
 }
 
 async function loginWithDiscord() {
@@ -220,6 +236,9 @@ async function loadEquities() {
         const equities = await supabaseRest('equities', 'select=*&is_active=eq.true&order=ticker');
         console.log('Equities loaded:', equities.length);
 
+        // showAdmin: render admin editing UI only when admin AND in admin view mode
+        const showAdmin = isAdmin && adminViewMode;
+
         const obParams = isAdmin
             ? 'select=*'
             : 'select=*&quantity_available=gt.0';
@@ -255,7 +274,7 @@ async function loadEquities() {
             }).replace(/"/g, '&quot;');
 
             let bidHTML = '';
-            if (isAdmin) {
+            if (showAdmin) {
                 bidEntries.forEach(e => {
                     bidHTML += `
                         <div class="admin-offer-row" data-id="${e.id}">
@@ -278,7 +297,7 @@ async function loadEquities() {
             }
 
             let askHTML = '';
-            if (isAdmin) {
+            if (showAdmin) {
                 askEntries.forEach(e => {
                     askHTML += `
                         <div class="admin-offer-row" data-id="${e.id}">
@@ -300,10 +319,10 @@ async function loadEquities() {
                 askHTML = '<span class="book-empty">No offers</span>';
             }
 
-            const showBody = isAdmin || !isUnavailable;
+            const showBody = showAdmin || !isUnavailable;
 
             html += `
-                <div class="equity-card ${isUnavailable && !isAdmin ? 'unavailable' : ''}" data-ticker="${eq.ticker.toLowerCase()}" data-company="${eq.company_name.toLowerCase()}" data-equity-id="${eq.id}">
+                <div class="equity-card ${showAdmin ? 'admin-card' : ''} ${isUnavailable && !showAdmin ? 'unavailable' : ''}" data-ticker="${eq.ticker.toLowerCase()}" data-company="${eq.company_name.toLowerCase()}" data-equity-id="${eq.id}">
                     <div class="equity-card-header">
                         <span class="ticker-display">${eq.ticker}</span>
                         <span class="company-name">${eq.company_name}</span>
@@ -319,7 +338,7 @@ async function loadEquities() {
                             ${bidHTML}
                         </div>
                     </div>
-                    ${isAdmin ? `<div class="admin-actions" style="padding: 0 2rem 1rem; justify-content: center;">
+                    ${showAdmin ? `<div class="admin-actions" style="padding: 0 2rem 1rem; justify-content: center;">
                         <button class="admin-edit-btn save" onclick="adminSaveCard(${eq.id})">Save Changes</button>
                     </div>` : ''}`}
                 </div>
