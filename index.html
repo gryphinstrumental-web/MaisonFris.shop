@@ -1054,6 +1054,55 @@
             display: none;
         }
 
+        .oh-admin-actions {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(184, 180, 204, 0.1);
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .oh-action-btn {
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.25);
+            border-radius: 4px;
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.3rem 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-muted);
+        }
+
+        .oh-action-btn.approve {
+            border-color: rgba(168, 212, 160, 0.4);
+            color: #a8d4a0;
+        }
+
+        .oh-action-btn.approve:hover {
+            background: rgba(168, 212, 160, 0.15);
+        }
+
+        .oh-action-btn.pending {
+            border-color: rgba(204, 196, 130, 0.4);
+            color: #ccc482;
+        }
+
+        .oh-action-btn.pending:hover {
+            background: rgba(204, 196, 130, 0.15);
+        }
+
+        .oh-action-btn.delete {
+            border-color: rgba(212, 160, 160, 0.4);
+            color: #d4a0a0;
+        }
+
+        .oh-action-btn.delete:hover {
+            background: rgba(212, 160, 160, 0.15);
+        }
+
         #profileForm input[readonly] {
             background: transparent;
             border-color: transparent;
@@ -1205,6 +1254,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
 </body>
 </html>

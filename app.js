@@ -322,8 +322,21 @@ async function loadOrderHistory() {
                 order.minecraft_ign || '', discordUser
             ].join(' ').toLowerCase();
 
+            let adminHTML = '';
+            if (isAdmin) {
+                adminHTML = `<div class="oh-row oh-admin-actions">`;
+                if (order.status !== 'approved') {
+                    adminHTML += `<button class="oh-action-btn approve" onclick="adminUpdateOrder(${order.id}, 'approved')">Approve</button>`;
+                }
+                if (order.status !== 'pending') {
+                    adminHTML += `<button class="oh-action-btn pending" onclick="adminUpdateOrder(${order.id}, 'pending')">Pending</button>`;
+                }
+                adminHTML += `<button class="oh-action-btn delete" onclick="adminDeleteOrder(${order.id})">Delete</button>`;
+                adminHTML += `</div>`;
+            }
+
             html += `
-                <div class="order-history-item" data-search="${searchStr.replace(/"/g, '&quot;')}">
+                <div class="order-history-item" data-search="${searchStr.replace(/"/g, '&quot;')}" data-order-id="${order.id}">
                     <div class="oh-row">
                         <span class="oh-ticker">${ticker}</span>
                         <span class="oh-side ${order.side}">${order.side.toUpperCase()}</span>
@@ -338,6 +351,7 @@ async function loadOrderHistory() {
                         ${order.minecraft_ign ? `<span>IGN: ${order.minecraft_ign}</span>` : ''}
                         <span>${date}</span>
                     </div>
+                    ${adminHTML}
                 </div>`;
         });
         html += '</div>';
@@ -356,6 +370,29 @@ document.getElementById('orderHistorySearch').addEventListener('input', (e) => {
         item.classList.toggle('filtered-out', !match);
     });
 });
+
+async function adminUpdateOrder(orderId, newStatus) {
+    if (!isAdmin) return;
+    try {
+        await supabaseUpdate('orders', orderId, { status: newStatus });
+        loadOrderHistory();
+    } catch (err) {
+        console.error('Error updating order:', err);
+        alert('Error updating order: ' + err.message);
+    }
+}
+
+async function adminDeleteOrder(orderId) {
+    if (!isAdmin) return;
+    if (!confirm('Delete this order? This cannot be undone.')) return;
+    try {
+        await supabaseDelete('orders', orderId);
+        loadOrderHistory();
+    } catch (err) {
+        console.error('Error deleting order:', err);
+        alert('Error deleting order: ' + err.message);
+    }
+}
 
 // ============================================
 // Auth state — single source of truth
