@@ -310,13 +310,13 @@ async function loadEquities() {
                     </div>
                     ${!showBody ? '<div class="unavailable-label">Not currently traded</div>' : `
                     <div class="equity-card-body">
-                        <div class="book-side bid">
-                            <div class="book-side-label">Bid</div>
-                            ${bidHTML}
-                        </div>
                         <div class="book-side ask">
                             <div class="book-side-label">Ask</div>
                             ${askHTML}
+                        </div>
+                        <div class="book-side bid">
+                            <div class="book-side-label">Bid</div>
+                            ${bidHTML}
                         </div>
                     </div>
                     ${isAdmin ? `<div class="admin-actions" style="padding: 0 2rem 1rem; justify-content: center;">
