@@ -1047,10 +1047,11 @@
         window.addEventListener('popstate', navigate);
 
         // Handle SPA redirect from 404.html
+        // Preserve hash fragment so Supabase can read auth tokens
         const redirectPath = sessionStorage.getItem('redirect');
         if (redirectPath) {
             sessionStorage.removeItem('redirect');
-            history.replaceState(null, '', redirectPath);
+            history.replaceState(null, '', redirectPath + window.location.hash);
         }
 
         // Check admin status from profiles table
