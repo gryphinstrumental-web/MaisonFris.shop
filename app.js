@@ -148,6 +148,8 @@ function updateAuthUI() {
     } else {
         authBar.innerHTML = '<button class="login-btn" id="loginBtn" onclick="loginWithDiscord()">Sign in with Discord</button>';
     }
+    const comeInBtn = document.getElementById('comeInBtn');
+    if (comeInBtn) comeInBtn.style.display = currentUser ? 'none' : '';
     if (window.location.pathname === '/orderbook') loadEquities();
 }
 
