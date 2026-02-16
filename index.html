@@ -436,7 +436,7 @@
         }
 
 
-        .book-side.ask {
+        .book-side.sell {
             border-left: 1px solid rgba(184, 180, 204, 0.1);
         }
 
@@ -446,20 +446,13 @@
             text-transform: uppercase;
             margin-bottom: 0.75rem;
             font-weight: 500;
-        }
-
-        .book-side.bid .book-side-label {
-            color: #a8d4a0;
-        }
-
-        .book-side.ask .book-side-label {
-            color: #d4a0a0;
+            color: var(--text-muted);
         }
 
         .book-offer {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
+            flex-direction: column;
+            align-items: flex-start;
             gap: 0.5rem;
             margin-bottom: 0.6rem;
         }
@@ -473,14 +466,7 @@
         .book-offer .offer-info .price {
             font-weight: 500;
             font-size: 1.05rem;
-        }
-
-        .book-side.bid .offer-info .price {
-            color: #a8d4a0;
-        }
-
-        .book-side.ask .offer-info .price {
-            color: #d4a0a0;
+            color: var(--text);
         }
 
         .book-offer .offer-info .qty {
@@ -490,7 +476,7 @@
 
         .book-offer button {
             padding: 0.5rem 1.25rem;
-            border: 1px solid;
+            border: 1px solid rgba(184, 180, 204, 0.4);
             border-radius: 5px;
             font-size: 0.75rem;
             font-weight: 500;
@@ -500,31 +486,15 @@
             transition: all 0.25s ease;
             font-family: 'Raleway', sans-serif;
             white-space: nowrap;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
         }
 
         .book-offer button:hover {
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .book-side.bid button {
-            background: rgba(168, 212, 160, 0.15);
-            border-color: #a8d4a0;
-            color: #a8d4a0;
-        }
-
-        .book-side.bid button:hover {
-            background: rgba(168, 212, 160, 0.3);
-        }
-
-        .book-side.ask button {
-            background: rgba(212, 160, 160, 0.15);
-            border-color: #d4a0a0;
-            color: #d4a0a0;
-        }
-
-        .book-side.ask button:hover {
-            background: rgba(212, 160, 160, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--text);
         }
 
         .book-empty {
@@ -548,7 +518,7 @@
             .equity-card-body {
                 grid-template-columns: 1fr;
             }
-            .book-side.ask {
+            .book-side.sell {
                 border-left: none;
                 border-top: 1px solid rgba(184, 180, 204, 0.1);
             }
@@ -959,6 +929,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
 </body>
 </html>
