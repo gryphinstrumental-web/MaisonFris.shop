@@ -996,7 +996,14 @@
         };
 
         // Initialize Supabase
+        console.log('[AUTH DEBUG] Page loaded at:', window.location.href);
+        console.log('[AUTH DEBUG] search:', window.location.search);
+        console.log('[AUTH DEBUG] hash:', window.location.hash ? window.location.hash.substring(0, 80) + '...' : '(empty)');
+        console.log('[AUTH DEBUG] Supabase URL:', CONFIG.supabaseUrl);
+        console.log('[AUTH DEBUG] Supabase Key (first 20 chars):', CONFIG.supabaseKey.substring(0, 20));
+
         const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+        console.log('[AUTH DEBUG] Supabase client created');
         let currentUser = null;
         let isAdmin = false;
 
@@ -1048,13 +1055,20 @@
 
         // Detect OAuth callback — PKCE uses ?code= in query, implicit uses #access_token in hash
         const isAuthCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token');
+        console.log('[AUTH DEBUG] isAuthCallback:', isAuthCallback);
+        console.log('[AUTH DEBUG] has code= in search:', window.location.search.includes('code='));
+        console.log('[AUTH DEBUG] has access_token in hash:', window.location.hash.includes('access_token'));
 
         // Handle SPA redirect from 404.html (only when NOT an auth callback)
         const redirectPath = sessionStorage.getItem('redirect');
+        console.log('[AUTH DEBUG] sessionStorage redirect:', redirectPath);
         if (redirectPath) {
             sessionStorage.removeItem('redirect');
             if (!isAuthCallback) {
+                console.log('[AUTH DEBUG] Applying SPA redirect to:', redirectPath);
                 history.replaceState(null, '', redirectPath);
+            } else {
+                console.log('[AUTH DEBUG] SKIPPING SPA redirect because auth callback detected');
             }
         }
 
@@ -1066,20 +1080,32 @@
         }
 
         // Check auth state on load
-        sb.auth.getSession().then(async ({ data: { session } }) => {
+        console.log('[AUTH DEBUG] Calling getSession()...');
+        sb.auth.getSession().then(async ({ data: { session }, error }) => {
+            console.log('[AUTH DEBUG] getSession() result:', { session: session ? 'EXISTS' : 'NULL', error });
             if (session) {
+                console.log('[AUTH DEBUG] Session found! User:', session.user?.email, 'Provider:', session.user?.app_metadata?.provider);
                 currentUser = session.user;
                 await checkAdmin();
                 updateAuthUI();
+            } else {
+                console.log('[AUTH DEBUG] No session found from getSession()');
             }
+        }).catch(err => {
+            console.error('[AUTH DEBUG] getSession() EXCEPTION:', err);
         });
 
         // Listen for auth changes (handles OAuth redirect)
         sb.auth.onAuthStateChange(async (event, session) => {
+            console.log('[AUTH DEBUG] onAuthStateChange fired! Event:', event, 'Session:', session ? 'EXISTS' : 'NULL');
+            if (session) {
+                console.log('[AUTH DEBUG] Auth change user:', session.user?.email, 'Provider:', session.user?.app_metadata?.provider);
+            }
             currentUser = session?.user || null;
             await checkAdmin();
             updateAuthUI();
             if (event === 'SIGNED_IN') {
+                console.log('[AUTH DEBUG] SIGNED_IN event — navigating to /orderbook');
                 // Clean auth tokens from URL and go to orderbook
                 history.replaceState(null, '', '/orderbook');
                 navigate();
@@ -1107,13 +1133,15 @@
         }
 
         async function loginWithDiscord() {
-            const { error } = await sb.auth.signInWithOAuth({
+            console.log('[AUTH DEBUG] loginWithDiscord() called, redirectTo:', window.location.origin);
+            const { data, error } = await sb.auth.signInWithOAuth({
                 provider: 'discord',
                 options: {
                     redirectTo: window.location.origin
                 }
             });
-            if (error) console.error('Login error:', error);
+            console.log('[AUTH DEBUG] signInWithOAuth result:', { data, error });
+            if (error) console.error('[AUTH DEBUG] Login error:', error);
         }
 
         async function logoutUser() {
@@ -1125,7 +1153,10 @@
 
         // Skip initial navigate during OAuth callback — let Supabase read tokens first
         if (!isAuthCallback) {
+            console.log('[AUTH DEBUG] Not auth callback — running navigate()');
             navigate();
+        } else {
+            console.log('[AUTH DEBUG] Auth callback detected — SKIPPING navigate() to let Supabase exchange tokens');
         }
 
         // Load equities from Supabase
