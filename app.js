@@ -269,7 +269,7 @@ async function loadEquities() {
                 bidEntries.forEach(e => {
                     bidHTML += `
                         <div class="book-offer">
-                            <span class="offer-info"><span class="price">$${Number(e.price)}</span><span class="qty">${e.quantity_available} shares</span></span>
+                            <span class="offer-info"><span class="price">$${Number(e.price)}</span><span class="qty">Available: ${e.quantity_available}</span></span>
                             <button onclick='openOrderForm("SELL", "${eq.ticker}", ${tiers}, ${eq.id})'>Sell</button>
                         </div>`;
                 });
@@ -292,7 +292,7 @@ async function loadEquities() {
                 askEntries.forEach(e => {
                     askHTML += `
                         <div class="book-offer">
-                            <span class="offer-info"><span class="price">$${Number(e.price)}</span><span class="qty">${e.quantity_available} shares</span></span>
+                            <span class="offer-info"><span class="price">$${Number(e.price)}</span><span class="qty">Available: ${e.quantity_available}</span></span>
                             <button onclick='openOrderForm("BUY", "${eq.ticker}", ${tiers}, ${eq.id})'>Buy</button>
                         </div>`;
                 });
@@ -310,13 +310,13 @@ async function loadEquities() {
                     </div>
                     ${!showBody ? '<div class="unavailable-label">Not currently traded</div>' : `
                     <div class="equity-card-body">
-                        <div class="book-side buy">
-                            <div class="book-side-label">Buy</div>
-                            ${askHTML}
-                        </div>
-                        <div class="book-side sell">
-                            <div class="book-side-label">Sell</div>
+                        <div class="book-side bid">
+                            <div class="book-side-label">Bid</div>
                             ${bidHTML}
+                        </div>
+                        <div class="book-side ask">
+                            <div class="book-side-label">Ask</div>
+                            ${askHTML}
                         </div>
                     </div>
                     ${isAdmin ? `<div class="admin-actions" style="padding: 0 2rem 1rem; justify-content: center;">
