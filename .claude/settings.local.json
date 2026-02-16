@@ -3,7 +3,16 @@
     "allow": [
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(where.exe:*)",
+      "Bash(dir:*)",
+      "Bash(dir \"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\")",
+      "Bash(dir \"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\")",
+      "Bash(git pull:*)"
     ]
   }
 }

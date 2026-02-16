@@ -1048,12 +1048,16 @@
 
         window.addEventListener('popstate', navigate);
 
-        // Handle SPA redirect from 404.html
-        // Preserve query string (PKCE code) and hash (implicit tokens) for Supabase auth
+        // Detect OAuth callback — tokens are in the hash fragment (implicit flow)
+        const isAuthCallback = window.location.hash.includes('access_token');
+
+        // Handle SPA redirect from 404.html (only when NOT an auth callback)
         const redirectPath = sessionStorage.getItem('redirect');
         if (redirectPath) {
             sessionStorage.removeItem('redirect');
-            history.replaceState(null, '', redirectPath + window.location.search + window.location.hash);
+            if (!isAuthCallback) {
+                history.replaceState(null, '', redirectPath);
+            }
         }
 
         // Check admin status from profiles table
@@ -1077,9 +1081,10 @@
             currentUser = session?.user || null;
             await checkAdmin();
             updateAuthUI();
-            // After OAuth redirect, navigate back to orderbook
-            if (event === 'SIGNED_IN' && window.location.pathname !== '/orderbook') {
-                navigateTo('/orderbook');
+            if (event === 'SIGNED_IN') {
+                // Clean auth tokens from URL and go to orderbook
+                history.replaceState(null, '', '/orderbook');
+                navigate();
             }
         });
 
@@ -1107,7 +1112,7 @@
             const { error } = await sb.auth.signInWithOAuth({
                 provider: 'discord',
                 options: {
-                    redirectTo: window.location.origin + '/orderbook'
+                    redirectTo: window.location.origin
                 }
             });
             if (error) console.error('Login error:', error);
@@ -1120,7 +1125,10 @@
             updateAuthUI();
         }
 
-        navigate();
+        // Skip initial navigate during OAuth callback — let Supabase read tokens first
+        if (!isAuthCallback) {
+            navigate();
+        }
 
         // Load equities from Supabase
         async function loadEquities() {
