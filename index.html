@@ -1072,14 +1072,40 @@
             isAdmin = data?.is_admin || false;
         }
 
-        // Check auth state on load
-        sb.auth.getSession().then(async ({ data: { session } }) => {
+        // Check auth state on load — with fallback session recovery
+        async function initAuth() {
+            const { data: { session }, error } = await sb.auth.getSession();
             if (session) {
                 currentUser = session.user;
                 await checkAdmin();
                 updateAuthUI();
+            } else {
+                // Fallback: try to recover session from localStorage manually
+                const storageKey = `sb-ubuypxqueqxvugstmtkx-auth-token`;
+                const stored = localStorage.getItem(storageKey);
+                if (stored) {
+                    try {
+                        const parsed = JSON.parse(stored);
+                        const accessToken = parsed.access_token;
+                        const refreshToken = parsed.refresh_token;
+                        if (accessToken && refreshToken) {
+                            const { data: recovered, error: recoverErr } = await sb.auth.setSession({
+                                access_token: accessToken,
+                                refresh_token: refreshToken
+                            });
+                            if (recovered?.session) {
+                                currentUser = recovered.session.user;
+                                await checkAdmin();
+                                updateAuthUI();
+                            }
+                        }
+                    } catch (e) {
+                        // stored data corrupted, ignore
+                    }
+                }
             }
-        });
+        }
+        initAuth();
 
         // Listen for auth changes (handles OAuth redirect)
         sb.auth.onAuthStateChange(async (event, session) => {
