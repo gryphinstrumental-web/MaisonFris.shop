@@ -135,15 +135,23 @@ let authResolved = false;
 sb.auth.onAuthStateChange(async (event, session) => {
     console.log('Auth event:', event, session ? 'has session' : 'no session');
 
+    // Mark resolved IMMEDIATELY so the timeout doesn't double-navigate
+    const isFirstEvent = !authResolved;
+    authResolved = true;
+
     currentUser = session?.user || null;
-    await checkAdmin();
+
+    try {
+        await checkAdmin();
+    } catch (e) {
+        console.error('checkAdmin failed:', e);
+        isAdmin = false;
+    }
+
     updateAuthUI();
 
-    if (!authResolved) {
-        // First auth event — now safe to navigate
-        authResolved = true;
+    if (isFirstEvent) {
         if (event === 'SIGNED_IN' && isAuthCallback) {
-            // Coming back from OAuth redirect — go to orderbook
             history.replaceState(null, '', '/orderbook');
         }
         navigate();
@@ -153,8 +161,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     }
 });
 
-// Safety net: if onAuthStateChange never fires (shouldn't happen, but just in case),
-// navigate after a short delay so the page isn't stuck blank
+// Safety net: if onAuthStateChange never fires, navigate after 3s
 setTimeout(() => {
     if (!authResolved) {
         console.warn('Auth did not resolve in time, navigating anyway');
@@ -170,12 +177,14 @@ async function loadEquities() {
     const equityData = document.getElementById('equityData');
 
     try {
+        console.log('Loading equities...');
         const { data: equities, error: eqError } = await sb
             .from('equities')
             .select('*')
             .eq('is_active', true)
             .order('ticker');
 
+        console.log('Equities response:', equities?.length ?? 'null', eqError || 'no error');
         if (eqError) throw eqError;
 
         let obQuery = sb.from('order_book').select('*');
