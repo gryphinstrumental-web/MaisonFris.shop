@@ -5,17 +5,13 @@
 const CONFIG = {
     supabaseUrl: 'https://ubuypxqueqxvugstmtkx.supabase.co',
     supabaseKey: 'sb_publishable_ndTGBxW3c2bOdMzgOVvy7w_9py3MLUs',
+    workerUrl: 'https://maisonfris-auth.maisonfris.workers.dev',
     discordWebhook: 'https://discord.com/api/webhooks/1472730251372003474/aWcIylD6Ew7gOI1KyCLToj8aQfd7hsDJ8YqUdxniBmxSFaa_YwGAQKqwZH-gQEPLUv7Y'
 };
 
-// Initialize Supabase (used for auth only)
+// Supabase client — used ONLY for real-time subscriptions (auth handled by Worker)
 const sb = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
-    auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: 'pkce'
-    }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
 
 let currentUser = null;
@@ -58,6 +54,19 @@ async function supabaseUpdate(table, id, updates) {
 async function supabaseDelete(table, id) {
     const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}?id=eq.${id}`, { method: 'DELETE', headers: restHeaders() });
     if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
+}
+
+// ============================================
+// JWT helpers
+// ============================================
+function parseJWT(token) {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload.exp && payload.exp < Date.now() / 1000) return null;
+        return payload;
+    } catch { return null; }
 }
 
 // ============================================
@@ -133,19 +142,6 @@ function navigate() {
 window.addEventListener('popstate', navigate);
 
 // ============================================
-// SPA Redirect (from 404.html)
-// ============================================
-const isAuthCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token');
-const redirectPath = sessionStorage.getItem('redirect');
-
-if (redirectPath) {
-    sessionStorage.removeItem('redirect');
-    if (!isAuthCallback) {
-        history.replaceState(null, '', redirectPath);
-    }
-}
-
-// ============================================
 // Auth
 // ============================================
 async function checkAdmin() {
@@ -206,20 +202,20 @@ function toggleAdminView() {
     loadEquities();
 }
 
-async function loginWithDiscord() {
-    const { error } = await sb.auth.signInWithOAuth({
-        provider: 'discord',
-        options: { redirectTo: window.location.origin }
-    });
-    if (error) console.error('Login error:', error);
+function loginWithDiscord() {
+    const redirect = (window.location.pathname === '/home' || window.location.pathname === '/')
+        ? '/orderbook' : window.location.pathname;
+    window.location.href = `${CONFIG.workerUrl}/auth/discord?redirect=${encodeURIComponent(redirect)}`;
 }
 
-async function logoutUser() {
-    await sb.auth.signOut();
+function logoutUser() {
+    localStorage.removeItem('mf_token');
     currentUser = null;
     currentAccessToken = null;
     isAdmin = false;
+    userProfile = null;
     updateAuthUI();
+    navigateTo('/home');
 }
 
 // ============================================
@@ -374,7 +370,11 @@ document.getElementById('orderHistorySearch').addEventListener('input', (e) => {
 async function adminUpdateOrder(orderId, newStatus) {
     if (!isAdmin) return;
     try {
-        await supabaseUpdate('orders', orderId, { status: newStatus });
+        const result = await supabaseUpdate('orders', orderId, { status: newStatus });
+        if (!result || result.length === 0) {
+            alert('Update failed. Make sure the admin RLS policies exist in Supabase.');
+            return;
+        }
         loadOrderHistory();
     } catch (err) {
         console.error('Error updating order:', err);
@@ -386,52 +386,23 @@ async function adminDeleteOrder(orderId) {
     if (!isAdmin) return;
     if (!confirm('Delete this order? This cannot be undone.')) return;
     try {
-        await supabaseDelete('orders', orderId);
+        const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/orders?id=eq.${orderId}`, {
+            method: 'DELETE',
+            headers: restHeaders()
+        });
+        if (!resp.ok) throw new Error(`REST ${resp.status}: ${await resp.text()}`);
+        const text = await resp.text();
+        const deleted = text ? JSON.parse(text) : [];
+        if (deleted.length === 0) {
+            alert('Delete failed. Make sure the admin DELETE policy exists in Supabase.');
+            return;
+        }
         loadOrderHistory();
     } catch (err) {
         console.error('Error deleting order:', err);
         alert('Error deleting order: ' + err.message);
     }
 }
-
-// ============================================
-// Auth state — single source of truth
-// ============================================
-let authResolved = false;
-
-sb.auth.onAuthStateChange(async (event, session) => {
-    console.log('Auth event:', event, session ? 'has session' : 'no session');
-
-    const isFirstEvent = !authResolved;
-    authResolved = true;
-    currentUser = session?.user || null;
-    currentAccessToken = session?.access_token || null;
-
-    // Navigate immediately so page isn't blank
-    if (isFirstEvent) {
-        if (event === 'SIGNED_IN' && isAuthCallback) {
-            history.replaceState(null, '', '/orderbook');
-        }
-        navigate();
-    } else if (event === 'SIGNED_IN' && isAuthCallback) {
-        history.replaceState(null, '', '/orderbook');
-        navigate();
-    }
-
-    // Then check admin, load profile, and update UI
-    await checkAdmin();
-    await loadProfile();
-    updateAuthUI();
-});
-
-// Safety net
-setTimeout(() => {
-    if (!authResolved) {
-        console.warn('Auth timeout, navigating anyway');
-        authResolved = true;
-        navigate();
-    }
-}, 3000);
 
 // ============================================
 // Load Equities (direct REST — bypasses Supabase JS client)
@@ -848,3 +819,70 @@ async function adminRemoveTier(bookId) {
         alert('Error removing tier: ' + err.message);
     }
 }
+
+// ============================================
+// Init — Session bootstrap (replaces Supabase Auth)
+// ============================================
+(async function init() {
+    const url = new URL(window.location.href);
+    const tokenParam = url.searchParams.get('token');
+    let authRedirect = null;
+
+    // Pick up JWT from Worker callback
+    if (tokenParam) {
+        localStorage.setItem('mf_token', tokenParam);
+        authRedirect = url.searchParams.get('redirect') || '/orderbook';
+        url.searchParams.delete('token');
+        url.searchParams.delete('redirect');
+        url.searchParams.delete('auth_error');
+        const cleanUrl = url.pathname + (url.search || '') + url.hash;
+        history.replaceState(null, '', cleanUrl || '/');
+    }
+
+    // Check for auth error from Worker
+    const authError = url.searchParams.get('auth_error');
+    if (authError) {
+        console.error('Auth error:', authError);
+        url.searchParams.delete('auth_error');
+        history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+    }
+
+    // Load existing token from storage
+    const token = localStorage.getItem('mf_token');
+    if (token) {
+        const payload = parseJWT(token);
+        if (payload) {
+            currentAccessToken = token;
+            currentUser = {
+                id: payload.sub,
+                user_metadata: payload.user_metadata || {}
+            };
+        } else {
+            // Token expired or invalid
+            localStorage.removeItem('mf_token');
+        }
+    }
+
+    // Handle SPA redirect from 404.html
+    const spaRedirect = sessionStorage.getItem('redirect');
+    if (spaRedirect) {
+        sessionStorage.removeItem('redirect');
+        if (!authRedirect) {
+            history.replaceState(null, '', spaRedirect);
+        }
+    }
+
+    // Auth callback redirect takes priority
+    if (authRedirect) {
+        history.replaceState(null, '', authRedirect);
+    }
+
+    // Load admin status + profile if logged in
+    if (currentUser) {
+        await checkAdmin();
+        await loadProfile();
+    }
+
+    updateAuthUI();
+    navigate();
+})();
