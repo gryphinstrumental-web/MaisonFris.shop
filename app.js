@@ -129,6 +129,20 @@ function navigate() {
         document.getElementById('profileView').classList.add('active');
         document.body.classList.remove('landing');
         loadProfile().then(() => fillProfileForm());
+    } else if (path === '/new-callisto') {
+        document.getElementById('newCallistoView').classList.add('active');
+        document.body.classList.remove('landing');
+        setTimeout(() => loadNewCallisto(), 100);
+    } else if (path === '/usermanagement') {
+        if (!currentUser || !isAdmin) {
+            history.replaceState(null, '', '/home');
+            document.getElementById('landingView').classList.add('active');
+            document.body.classList.add('landing');
+            return;
+        }
+        document.getElementById('userMgmtView').classList.add('active');
+        document.body.classList.remove('landing');
+        loadAdminUsers();
     } else if (path === '/home') {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
@@ -193,6 +207,10 @@ function updateAuthUI() {
         if (gate) gate.classList.toggle('active', !currentUser);
         loadEquities();
     }
+
+    // Show/hide admin user management nav link
+    const userMgmtLink = document.getElementById('userMgmtLink');
+    if (userMgmtLink) userMgmtLink.style.display = isAdmin ? '' : 'none';
 }
 
 function toggleAdminView() {
@@ -205,7 +223,7 @@ function toggleAdminView() {
 function loginWithDiscord() {
     const redirect = (window.location.pathname === '/home' || window.location.pathname === '/')
         ? '/orderbook' : window.location.pathname;
-    window.location.href = `${CONFIG.workerUrl}/auth/discord?redirect=${encodeURIComponent(redirect)}`;
+    window.location.href = `${CONFIG.workerUrl}/auth/discord?redirect=${encodeURIComponent(redirect)}&origin=${encodeURIComponent(window.location.origin)}`;
 }
 
 function logoutUser() {
@@ -217,6 +235,89 @@ function logoutUser() {
     updateAuthUI();
     navigateTo('/home');
 }
+
+// ============================================
+// Admin User Management (/usermanagement)
+// ============================================
+let adminAllProfiles = [];
+
+async function loadAdminUsers() {
+    if (!isAdmin) return;
+    try {
+        adminAllProfiles = await supabaseRest('profiles', 'select=*&order=discord_username');
+        renderAdminUsers('');
+    } catch (e) {
+        console.error('Failed to load users:', e);
+    }
+}
+
+function renderAdminUsers(filter) {
+    const list = document.getElementById('adminUsersList');
+    if (!list) return;
+    const q = (filter || '').toLowerCase().trim();
+    const filtered = adminAllProfiles.filter(p => {
+        if (!q) return true;
+        return [p.discord_username, p.minecraft_ign].filter(Boolean).join(' ').toLowerCase().includes(q);
+    });
+    list.innerHTML = '';
+    filtered.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'admin-user-row';
+        const avatarUrl = p.discord_avatar || '';
+        const isSurveyor = !!p.is_surveyor;
+        const isPAdmin = !!p.is_admin;
+        row.innerHTML = `
+            ${avatarUrl ? `<img class="admin-user-avatar" src="${avatarUrl}" alt="">` : `<div class="admin-user-avatar" style="background:rgba(184,180,204,0.2);"></div>`}
+            <div class="admin-user-info">
+                <div class="admin-user-name">${p.discord_username || 'Unknown'}</div>
+                ${p.minecraft_ign ? `<div class="admin-user-ign">${p.minecraft_ign}</div>` : ''}
+            </div>
+            <button class="admin-role-btn ${isSurveyor ? 'active' : ''}" data-role="surveyor" data-uid="${p.id}" title="Toggle surveyor">Surveyor</button>
+            <button class="admin-role-btn admin-btn ${isPAdmin ? 'active' : ''}" data-role="admin" data-uid="${p.id}" title="Toggle admin">Admin</button>
+        `;
+        // Surveyor toggle
+        row.querySelector('[data-role="surveyor"]').addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            const newVal = !isSurveyor;
+            btn.textContent = '...';
+            try {
+                await fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${p.id}`, {
+                    method: 'PATCH', headers: restHeaders(), body: JSON.stringify({ is_surveyor: newVal })
+                });
+                p.is_surveyor = newVal;
+                renderAdminUsers(document.getElementById('adminUsersSearch').value);
+            } catch (err) {
+                console.error('Toggle surveyor failed:', err);
+                alert('Failed to update role: ' + err.message);
+                btn.textContent = 'Surveyor';
+            }
+        });
+        // Admin toggle
+        row.querySelector('[data-role="admin"]').addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            const newVal = !isPAdmin;
+            const action = newVal ? 'grant admin to' : 'revoke admin from';
+            if (!confirm(`Are you sure you want to ${action} ${p.discord_username}?`)) return;
+            btn.textContent = '...';
+            try {
+                await fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${p.id}`, {
+                    method: 'PATCH', headers: restHeaders(), body: JSON.stringify({ is_admin: newVal })
+                });
+                p.is_admin = newVal;
+                renderAdminUsers(document.getElementById('adminUsersSearch').value);
+            } catch (err) {
+                console.error('Toggle admin failed:', err);
+                alert('Failed to update role: ' + err.message);
+                btn.textContent = 'Admin';
+            }
+        });
+        list.appendChild(row);
+    });
+}
+
+document.getElementById('adminUsersSearch').addEventListener('input', (e) => {
+    renderAdminUsers(e.target.value);
+});
 
 // ============================================
 // Profile
@@ -819,6 +920,1139 @@ async function adminRemoveTier(bookId) {
         alert('Error removing tier: ' + err.message);
     }
 }
+
+// ============================================
+// New Callisto Property Map
+// ============================================
+let ncMap = null;
+let ncMarkers = [];
+let ncProperties = [];
+let ncLabelsVisible = false;
+
+const NC_PROPERTY_JSON_URL = 'https://raw.githubusercontent.com/jalhf/New-Callisto-Property-Register/main/converted_properties.json';
+const NC_TYPE_COLORS = {
+    'Residential': '#183dde',
+    'Commercial': '#2c7d27',
+    'Government': '#9e42f5',
+    'Mixed Use': '#e6a817'
+};
+
+async function loadNewCallisto() {
+    if (ncMap) {
+        ncMap.invalidateSize();
+        return;
+    }
+
+    // Image overlay bounds: MC X [-4608, -512], Z [6144, 10240]
+    // Leaflet CRS.Simple: lat = -MC_Z, lng = MC_X
+    const ncBounds = [[-10240, -4608], [-6144, -512]]; // [[south,west],[north,east]]
+
+    ncMap = L.map('ncMap', {
+        crs: L.CRS.Simple,
+        minZoom: -3,
+        maxZoom: 3,
+        zoomSnap: 0.5,
+        zoomDelta: 1,
+        attributionControl: false,
+        zoomControl: false,
+        doubleClickZoom: false,
+        maxBounds: [[-10500, -4900], [-5900, -200]],
+        maxBoundsViscosity: 0.8
+    });
+
+    L.imageOverlay('nc-terrain.jpg', ncBounds).addTo(ncMap);
+
+    // Center on New Callisto — lat = -minecraft_z, lng = minecraft_x
+    ncMap.setView([-8168, -3163], -1);
+
+    // Live coordinate display on hover
+    const coordsEl = document.getElementById('ncCoords');
+    coordsEl.textContent = 'X: —  Z: —';
+    ncMap.getContainer().addEventListener('mousemove', (e) => {
+        const pt = ncMap.containerPointToLatLng(L.point(e.layerX, e.layerY));
+        const mcX = Math.round(pt.lng);
+        const mcZ = Math.round(-pt.lat);
+        coordsEl.textContent = `X: ${mcX}  Z: ${mcZ}`;
+    });
+
+    // Double-click to create new property row in spreadsheet (admin/surveyor only)
+    ncMap.on('dblclick', (e) => {
+        if (!ncCanEdit()) return;
+        const mcX = Math.round(e.latlng.lng);
+        const mcZ = Math.round(-e.latlng.lat);
+        if (!confirm(`Create new property at X: ${mcX}, Z: ${mcZ}?`)) return;
+        // Open table overlay + enter edit mode
+        const overlay = document.getElementById('ncTableOverlay');
+        overlay.classList.add('open');
+        if (!ncEditMode) {
+            ncDirtyRows.clear();
+            ncEditMode = true;
+        }
+        // Add new row with coordinates pre-filled
+        ncProperties.push({ name: 'New Property', type: 'Residential', address: '', owner: '',
+            discord_contact: null, x: mcX, z: mcZ, color: '#888',
+            appraised_value: null, status: null, last_surveyed: null, image_url: null });
+        ncHasUnsaved = true;
+        ncDirtyRows.add(ncProperties.length - 1);
+        ncUpdateToolbar();
+        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+        // Scroll table to the new row
+        const wrap = document.querySelector('.nc-table-wrap');
+        if (wrap) setTimeout(() => wrap.scrollTop = wrap.scrollHeight, 50);
+    });
+
+    try {
+        // Load from Supabase (source of truth)
+        let props = await supabaseRest('nc_properties', 'select=*&order=id.asc');
+
+        // Auto-seed from GitHub JSON if table is empty
+        if ((!props || props.length === 0) && ncCanEdit()) {
+            console.log('nc_properties empty — seeding from GitHub JSON...');
+            const resp = await fetch(NC_PROPERTY_JSON_URL);
+            const data = await resp.json();
+            const features = (data.features || data).filter(f => f.x != null && f.z != null);
+            const seedRows = features.map(f => ({
+                name: f.name || null, type: f.type || null, address: f.address || null,
+                owner: f.owner || null, x: f.x, z: f.z, color: f.color || null, sale_link: f.sale_link || null
+            }));
+            await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties`, {
+                method: 'POST', headers: restHeaders(), body: JSON.stringify(seedRows)
+            });
+            props = await supabaseRest('nc_properties', 'select=*&order=id.asc');
+        }
+
+        // Fallback to GitHub JSON if Supabase is empty and user can't seed
+        if (!props || props.length === 0) {
+            const resp = await fetch(NC_PROPERTY_JSON_URL);
+            const data = await resp.json();
+            props = data.features || data;
+        }
+
+        ncProperties = props;
+        renderNCMarkers(ncProperties);
+        renderNCPanel(ncProperties);
+        const countEl = document.getElementById('ncPropsCount');
+        if (countEl) countEl.textContent = `${ncProperties.length} properties`;
+    } catch (err) {
+        console.error('Failed to load NC properties:', err);
+        // Fallback to GitHub JSON
+        try {
+            const resp = await fetch(NC_PROPERTY_JSON_URL);
+            const data = await resp.json();
+            ncProperties = data.features || data;
+            renderNCMarkers(ncProperties);
+            renderNCPanel(ncProperties);
+        } catch (e) { console.error('GitHub fallback also failed:', e); }
+    }
+}
+
+function renderNCMarkers(properties) {
+    ncMarkers.forEach(m => ncMap.removeLayer(m));
+    ncMarkers = [];
+
+    properties.forEach((prop, pi) => {
+        if (prop.x == null || prop.z == null) return;
+
+        const dotColor = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+        const marker = L.circleMarker([-prop.z, prop.x], {
+            radius: 6,
+            fillColor: dotColor,
+            color: 'rgba(255,255,255,0.5)',
+            weight: 1,
+            fillOpacity: 0.85
+        }).addTo(ncMap);
+
+        marker.bindTooltip(prop.name || 'Unnamed', {
+            className: 'nc-tooltip',
+            direction: 'top',
+            offset: [0, -8],
+            permanent: ncLabelsVisible
+        });
+
+        let popupHTML = `<div class="nc-popup">`;
+        if (prop.image_url) popupHTML += `<img src="${prop.image_url}" class="nc-popup-img" alt="">`;
+        popupHTML += `<h3>${prop.name || 'Unnamed Property'}</h3>`;
+        if (prop.type) {
+            const tc = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+            popupHTML += `<span class="nc-prop-type" style="background: ${tc};">${prop.type}</span>`;
+        }
+        if (prop.address) popupHTML += `<div class="nc-prop-detail"><span>Address</span><span class="value">${prop.address}</span></div>`;
+        if (prop.owner) popupHTML += `<div class="nc-prop-detail"><span>Owner</span><span class="value">${prop.owner}</span></div>`;
+        popupHTML += `<div class="nc-prop-detail"><span>Coords</span><span class="value">${prop.x}, ${prop.z}</span></div>`;
+        if (prop.appraised_value) popupHTML += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
+        if (prop.sale_link) popupHTML += `<div style="margin-top: 0.5rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
+        popupHTML += `<button class="nc-popup-edit-btn" onclick="ncEditPropertyInTable(${pi})">Edit in Table</button>`;
+        popupHTML += `</div>`;
+
+        marker.bindPopup(popupHTML);
+        marker._ncData = prop;
+        marker._ncIndex = pi;
+        ncMarkers.push(marker);
+    });
+}
+
+function ncToggleLabels() {
+    ncLabelsVisible = !ncLabelsVisible;
+    const btn = document.getElementById('ncLabelToggle');
+    if (btn) {
+        btn.textContent = ncLabelsVisible ? 'Hide Labels' : 'Show Labels';
+        btn.classList.toggle('active', ncLabelsVisible);
+    }
+    ncMarkers.forEach(marker => {
+        if (!ncMap.hasLayer(marker)) return;
+        const name = marker._ncData?.name || 'Unnamed';
+        marker.unbindTooltip();
+        marker.bindTooltip(name, {
+            className: 'nc-tooltip',
+            direction: 'top',
+            offset: [0, -8],
+            permanent: ncLabelsVisible
+        });
+    });
+}
+
+document.getElementById('ncLabelToggle').addEventListener('click', ncToggleLabels);
+
+let ncActiveMarker = null;
+
+function renderNCPanel(properties) {
+    const list = document.getElementById('ncPanelList');
+    if (!list) return;
+    list.innerHTML = '';
+    properties.forEach((prop, i) => {
+        if (prop.x == null || prop.z == null) return;
+        const card = document.createElement('div');
+        card.className = 'nc-panel-card';
+        card.dataset.index = i;
+        const tc = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+        const sc = NC_STATUS_COLORS[prop.status] || '';
+        card.innerHTML = `
+            <div class="nc-panel-card-top">
+                <div class="nc-panel-card-name">${prop.name || 'Unnamed'}</div>
+                <span class="nc-panel-card-coords">${prop.x}, ${prop.z}</span>
+            </div>
+            <div class="nc-panel-card-mid">
+                ${prop.type ? `<span class="nc-panel-card-type" style="background:${tc};">${prop.type}</span>` : ''}
+                ${prop.status ? `<span class="nc-panel-card-status" style="background:${sc};">${prop.status}</span>` : ''}
+            </div>
+            <div class="nc-panel-card-bottom">
+                <div class="nc-panel-card-addr">${prop.address || ''}</div>
+                ${prop.owner ? `<span class="nc-panel-card-owner">${prop.owner}</span>` : ''}
+            </div>
+        `;
+        card.addEventListener('click', () => highlightNCProperty(i, card));
+        list.appendChild(card);
+    });
+}
+
+function highlightNCProperty(index, card) {
+    // Clear previous highlight
+    if (ncActiveMarker) {
+        ncActiveMarker.setStyle({ radius: 6, weight: 1, color: 'rgba(255,255,255,0.5)' });
+        ncActiveMarker.closePopup();
+    }
+    document.querySelectorAll('.nc-panel-card.active').forEach(c => c.classList.remove('active'));
+
+    const marker = ncMarkers[index];
+    if (!marker) return;
+
+    // Highlight card
+    card.classList.add('active');
+
+    // Highlight marker
+    marker.setStyle({ radius: 10, weight: 3, color: '#fff' });
+    ncActiveMarker = marker;
+
+    // Pan map to marker and open popup
+    ncMap.setView(marker.getLatLng(), Math.max(ncMap.getZoom(), 0), { animate: true });
+    setTimeout(() => marker.openPopup(), 300);
+
+    // Scroll card into view
+    card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+
+// Edit property from map popup — opens table in edit mode and scrolls to row
+function ncEditPropertyInTable(propIndex) {
+    if (!ncCanEdit()) { alert('You must be logged in as admin or surveyor to edit.'); return; }
+    // Close popup
+    ncMap.closePopup();
+    // Open table overlay
+    const overlay = document.getElementById('ncTableOverlay');
+    overlay.classList.add('open');
+    // Enable edit mode
+    ncEditMode = true;
+    ncUpdateToolbar();
+    renderNCTable(ncProperties, '');
+    document.getElementById('ncTableSearch').value = '';
+    // Scroll to the row after render
+    setTimeout(() => {
+        const row = document.querySelector(`#ncTableBody tr[data-prop-idx="${propIndex}"]`);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.classList.add('nc-row-highlight');
+            setTimeout(() => row.classList.remove('nc-row-highlight'), 2000);
+        }
+    }, 100);
+}
+
+// Carousel arrow buttons — cycle through visible cards
+function ncCyclePanel(direction) {
+    const visibleCards = Array.from(document.querySelectorAll('.nc-panel-card:not(.nc-clone)'))
+        .filter(c => c.style.display !== 'none');
+    if (visibleCards.length === 0) return;
+
+    const activeIdx = visibleCards.findIndex(c => c.classList.contains('active'));
+    let nextIdx;
+    if (activeIdx === -1) {
+        nextIdx = direction > 0 ? 0 : visibleCards.length - 1;
+    } else {
+        nextIdx = (activeIdx + direction + visibleCards.length) % visibleCards.length;
+    }
+
+    const card = visibleCards[nextIdx];
+    const propIndex = parseInt(card.dataset.index);
+    highlightNCProperty(propIndex, card);
+}
+
+document.getElementById('ncPanelLeft').addEventListener('click', () => ncCyclePanel(-1));
+document.getElementById('ncPanelRight').addEventListener('click', () => ncCyclePanel(1));
+
+// Carousel drag-to-scroll
+(function () {
+    const list = document.getElementById('ncPanelList');
+    if (!list) return;
+    let isDown = false, startX, scrollLeft;
+    list.addEventListener('mousedown', (e) => {
+        isDown = true;
+        list.style.cursor = 'grabbing';
+        startX = e.pageX - list.offsetLeft;
+        scrollLeft = list.scrollLeft;
+    });
+    list.addEventListener('mouseleave', () => { isDown = false; list.style.cursor = ''; });
+    list.addEventListener('mouseup', () => { isDown = false; list.style.cursor = ''; });
+    list.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - list.offsetLeft;
+        list.scrollLeft = scrollLeft - (x - startX);
+    });
+})();
+
+let ncFilterType = null;   // active type filter
+let ncFilterStatus = null; // active status filter
+let ncFilterUnoccupied = false; // show only unoccupied
+
+function filterNCMarkers(query) {
+    const q = query.toLowerCase().trim();
+    let visible = 0;
+    const visibleIndices = new Set();
+    ncMarkers.forEach((marker, i) => {
+        const p = marker._ncData;
+        // Check type filter
+        if (ncFilterType && p.type !== ncFilterType) {
+            ncMap.removeLayer(marker);
+            return;
+        }
+        // Check status filter
+        if (ncFilterStatus && p.status !== ncFilterStatus) {
+            ncMap.removeLayer(marker);
+            return;
+        }
+        // Check unoccupied filter
+        if (ncFilterUnoccupied && p.owner && p.owner.trim()) {
+            ncMap.removeLayer(marker);
+            return;
+        }
+        // Check text search
+        const s = [p.name, p.owner, p.type, p.address, p.status].filter(Boolean).join(' ').toLowerCase();
+        const match = !q || s.includes(q);
+        if (match) {
+            if (!ncMap.hasLayer(marker)) marker.addTo(ncMap);
+            visibleIndices.add(String(i));
+            visible++;
+        } else {
+            ncMap.removeLayer(marker);
+        }
+    });
+    // Remove infinite-scroll clones so only originals remain
+    document.querySelectorAll('.nc-panel-card.nc-clone').forEach(c => c.remove());
+    document.querySelectorAll('.nc-panel-card').forEach(card => {
+        card.style.display = visibleIndices.has(card.dataset.index) ? '' : 'none';
+    });
+    const countEl = document.getElementById('ncPropsCount');
+    const total = ncMarkers.length;
+    if (countEl) countEl.textContent = (q || ncFilterType || ncFilterStatus || ncFilterUnoccupied) ? `${visible} of ${total} properties` : `${total} properties`;
+}
+
+function ncClearAllFilters() {
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
+    document.getElementById('ncSearchInput').value = '';
+    const uf = document.getElementById('ncUnoccupiedFilter');
+    if (uf) { uf.classList.remove('active'); uf.textContent = 'Show Occupied'; }
+}
+
+document.getElementById('ncSearchInput').addEventListener('input', (e) => {
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
+    const uf = document.getElementById('ncUnoccupiedFilter');
+    if (uf) { uf.classList.remove('active'); uf.textContent = 'Show Occupied'; }
+    filterNCMarkers(e.target.value);
+});
+
+// Type legend click-to-filter
+document.querySelectorAll('.nc-legend-item[data-type]').forEach(item => {
+    item.addEventListener('click', () => {
+        const type = item.dataset.type;
+        document.getElementById('ncSearchInput').value = '';
+        // Clear status + unoccupied filters
+        ncFilterStatus = null;
+        ncFilterUnoccupied = false;
+        document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
+        const uf = document.getElementById('ncUnoccupiedFilter');
+        if (uf) { uf.classList.remove('active'); uf.textContent = 'Show Occupied'; }
+        if (ncFilterType === type) {
+            ncFilterType = null;
+            item.classList.remove('active');
+        } else {
+            ncFilterType = type;
+            document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+        }
+        filterNCMarkers('');
+    });
+});
+
+// Unoccupied filter
+document.getElementById('ncUnoccupiedFilter').addEventListener('click', () => {
+    const el = document.getElementById('ncUnoccupiedFilter');
+    document.getElementById('ncSearchInput').value = '';
+    // Clear type and status filters
+    ncFilterType = null;
+    ncFilterStatus = null;
+    document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(e => e.classList.remove('active'));
+    document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(e => e.classList.remove('active'));
+    ncFilterUnoccupied = !ncFilterUnoccupied;
+    el.classList.toggle('active', ncFilterUnoccupied);
+    el.textContent = ncFilterUnoccupied ? 'Hide Occupied' : 'Show Occupied';
+    filterNCMarkers('');
+});
+
+// Status legend click-to-filter
+document.querySelectorAll('.nc-legend-item[data-status]').forEach(item => {
+    item.addEventListener('click', () => {
+        const status = item.dataset.status;
+        document.getElementById('ncSearchInput').value = '';
+        // Clear type + unoccupied filters
+        ncFilterType = null;
+        ncFilterUnoccupied = false;
+        document.querySelectorAll('#ncLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
+        const uf = document.getElementById('ncUnoccupiedFilter');
+        if (uf) { uf.classList.remove('active'); uf.textContent = 'Show Occupied'; }
+        if (ncFilterStatus === status) {
+            ncFilterStatus = null;
+            item.classList.remove('active');
+        } else {
+            ncFilterStatus = status;
+            document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+        }
+        filterNCMarkers('');
+    });
+});
+
+// Show All buttons
+document.getElementById('ncTypeShowAll').addEventListener('click', () => {
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    document.getElementById('ncSearchInput').value = '';
+    document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
+    const uf1 = document.getElementById('ncUnoccupiedFilter');
+    if (uf1) { uf1.classList.remove('active'); uf1.textContent = 'Show Occupied'; }
+    filterNCMarkers('');
+});
+document.getElementById('ncStatusShowAll').addEventListener('click', () => {
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    document.getElementById('ncSearchInput').value = '';
+    document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
+    const uf2 = document.getElementById('ncUnoccupiedFilter');
+    if (uf2) { uf2.classList.remove('active'); uf2.textContent = 'Show Occupied'; }
+    filterNCMarkers('');
+});
+
+// Table view
+let ncTableSort = { col: null, asc: true };
+const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'appraised_value', 'type', 'status', 'last_surveyed', 'x', 'z'];
+const NC_STATUS_COLORS = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
+let ncDirtyRows = new Set(); // track modified property ids/indices for save
+let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
+
+function renderNCTable(properties, filter = '') {
+    const body = document.getElementById('ncTableBody');
+    if (!body) return;
+    body.innerHTML = '';
+    const q = filter.toLowerCase().trim();
+
+    // Build sortable list with original indices
+    let rows = properties.map((prop, i) => ({ prop, i })).filter(r => r.prop.x != null && r.prop.z != null);
+
+    // Filter
+    if (q) {
+        rows = rows.filter(r => {
+            const p = r.prop;
+            return [p.name, p.type, p.address, p.owner, p.discord_contact, p.appraised_value != null ? String(p.appraised_value) : '', p.status, p.last_surveyed, String(p.x), String(p.z)].filter(Boolean).join(' ').toLowerCase().includes(q);
+        });
+    }
+
+    // Sort
+    if (ncTableSort.col !== null) {
+        const key = NC_TABLE_COLS[ncTableSort.col];
+        rows.sort((a, b) => {
+            let va = a.prop[key] ?? '', vb = b.prop[key] ?? '';
+            if (typeof va === 'number' && typeof vb === 'number') return ncTableSort.asc ? va - vb : vb - va;
+            va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+            return ncTableSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+    }
+
+    // Rebuild header based on visible columns
+    const thead = document.querySelector('#ncTable thead tr');
+    if (thead) {
+        thead.innerHTML = '';
+        NC_TABLE_COLS.forEach((col, ci) => {
+            const th = document.createElement('th');
+            if (!ncVisibleCols.has(col)) { th.style.display = 'none'; }
+            const labels = { name: 'Name', address: 'Address', owner: 'Owner', discord_contact: 'Discord', appraised_value: 'Value', type: 'Type', status: 'Status', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+            th.textContent = labels[col] || col;
+            th.classList.toggle('sorted', ncTableSort.col === ci);
+            const arrow = document.createElement('span');
+            arrow.className = 'sort-arrow';
+            arrow.textContent = ncTableSort.col === ci ? (ncTableSort.asc ? '\u25B2' : '\u25BC') : '\u25B4';
+            th.appendChild(arrow);
+            th.addEventListener('click', () => {
+                if (ncTableSort.col === ci) { ncTableSort.asc = !ncTableSort.asc; }
+                else { ncTableSort.col = ci; ncTableSort.asc = true; }
+                renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+            });
+            thead.appendChild(th);
+        });
+        // Image + locate columns
+        const imgTh = document.createElement('th'); imgTh.textContent = ''; thead.appendChild(imgTh);
+        const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
+    }
+
+    rows.forEach(({ prop, i }) => {
+        const tc = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+        const tr = document.createElement('tr');
+        tr.dataset.propIdx = i;
+        const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        const sc = NC_STATUS_COLORS[prop.status] || '#888';
+        const vis = col => ncVisibleCols.has(col) ? '' : ' style="display:none"';
+        tr.innerHTML = `
+            <td data-field="name"${vis('name')}>${prop.name || 'Unnamed'}</td>
+            <td data-field="address"${vis('address')}>${prop.address || ''}</td>
+            <td data-field="owner"${vis('owner')}>${prop.owner || ''}</td>
+            <td data-field="discord_contact"${vis('discord_contact')}>${prop.discord_contact || ''}</td>
+            <td data-field="appraised_value"${vis('appraised_value')}>${prop.appraised_value != null ? prop.appraised_value : ''}</td>
+            <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${prop.type}</span>` : ''}</td>
+            <td data-field="status"${vis('status')}>${prop.status ? `<span class="nc-status-badge" style="background:${sc};">${prop.status}</span>` : ''}</td>
+            <td data-field="last_surveyed"${vis('last_surveyed')}>${fmtDate(prop.last_surveyed)}</td>
+            <td data-field="x"${vis('x')}>${prop.x}</td>
+            <td data-field="z"${vis('z')}>${prop.z}</td>
+            <td class="nc-img-cell">${prop.image_url ? '<span class="nc-has-img" title="Has image">&#x1f5bc;</span>' : '<span class="nc-no-img">—</span>'}</td>
+            <td><button class="nc-table-locate" title="Show on map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></button></td>
+        `;
+
+        // Locate button
+        tr.querySelector('.nc-table-locate').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('ncTableOverlay').classList.remove('open');
+            const card = document.querySelectorAll('.nc-panel-card:not(.nc-clone)')[i];
+            if (card) highlightNCProperty(i, card);
+        });
+
+        // Click-to-expand for truncated text cells (owner, name, address)
+        ['owner', 'name', 'address', 'discord_contact'].forEach(field => {
+            const td = tr.querySelector(`td[data-field="${field}"]`);
+            if (!td) return;
+            td.style.cursor = 'pointer';
+            td.addEventListener('click', (e) => {
+                if (!ncEditMode) return; // only show popup in edit mode
+                e.stopPropagation();
+                ncShowCellPopup(td, prop, field, i);
+            });
+        });
+
+        // Make cells editable when edit mode is on
+        if (ncEditMode) {
+            const markDirty = () => { ncHasUnsaved = true; ncDirtyRows.add(i); };
+            tr.querySelectorAll('td[data-field]').forEach(td => {
+                const field = td.dataset.field;
+                // Type field gets a colored dropdown
+                if (field === 'type') {
+                    td.innerHTML = '';
+                    const sel = document.createElement('select');
+                    sel.className = 'nc-type-select';
+                    Object.keys(NC_TYPE_COLORS).forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t; opt.textContent = t;
+                        if (t === prop.type) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    sel.style.backgroundColor = NC_TYPE_COLORS[prop.type] || '#888';
+                    sel.addEventListener('change', () => {
+                        sel.style.backgroundColor = NC_TYPE_COLORS[sel.value] || '#888';
+                        if (prop.type !== sel.value) { prop.type = sel.value; markDirty(); }
+                    });
+                    td.appendChild(sel);
+                    return;
+                }
+                // Status field gets colored dropdown
+                if (field === 'status') {
+                    td.innerHTML = '';
+                    const sel = document.createElement('select');
+                    sel.className = 'nc-status-select';
+                    const emptyOpt = document.createElement('option');
+                    emptyOpt.value = ''; emptyOpt.textContent = '—';
+                    sel.appendChild(emptyOpt);
+                    Object.keys(NC_STATUS_COLORS).forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s; opt.textContent = s;
+                        if (s === prop.status) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    sel.style.backgroundColor = NC_STATUS_COLORS[prop.status] || 'rgba(90,90,128,0.5)';
+                    sel.addEventListener('change', () => {
+                        sel.style.backgroundColor = NC_STATUS_COLORS[sel.value] || 'rgba(90,90,128,0.5)';
+                        if (prop.status !== (sel.value || null)) { prop.status = sel.value || null; markDirty(); }
+                    });
+                    td.appendChild(sel);
+                    return;
+                }
+                // Date field gets date input
+                if (field === 'last_surveyed') {
+                    td.innerHTML = '';
+                    const inp = document.createElement('input');
+                    inp.type = 'date';
+                    inp.className = 'nc-date-input';
+                    inp.value = prop[field] ? prop[field].slice(0, 10) : '';
+                    inp.addEventListener('change', () => {
+                        prop[field] = inp.value || null;
+                        markDirty();
+                    });
+                    td.appendChild(inp);
+                    return;
+                }
+                // Appraised value gets number input
+                if (field === 'appraised_value') {
+                    td.innerHTML = '';
+                    const inp = document.createElement('input');
+                    inp.type = 'number';
+                    inp.className = 'nc-num-input';
+                    inp.value = prop.appraised_value ?? '';
+                    inp.placeholder = '0';
+                    inp.addEventListener('change', () => {
+                        prop.appraised_value = inp.value ? Number(inp.value) : null;
+                        markDirty();
+                    });
+                    td.appendChild(inp);
+                    return;
+                }
+                td.contentEditable = 'true';
+                td.addEventListener('blur', () => {
+                    const val = td.textContent.trim();
+                    const parsed = (field === 'x' || field === 'z') ? Number(val) : val;
+                    if (prop[field] !== parsed) { prop[field] = parsed; markDirty(); }
+                });
+                td.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
+                });
+            });
+            // Image cell — + to upload, x to remove
+            const imgCell = tr.querySelector('.nc-img-cell');
+            if (imgCell) {
+                imgCell.innerHTML = '';
+                if (prop.image_url) {
+                    const rmBtn = document.createElement('button');
+                    rmBtn.className = 'nc-img-action-btn nc-img-remove';
+                    rmBtn.textContent = '\u00d7';
+                    rmBtn.title = 'Remove image';
+                    rmBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        prop.image_url = null;
+                        markDirty();
+                        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+                    });
+                    imgCell.appendChild(rmBtn);
+                } else {
+                    const addBtn = document.createElement('button');
+                    addBtn.className = 'nc-img-action-btn nc-img-add';
+                    addBtn.textContent = '+';
+                    addBtn.title = 'Upload image';
+                    addBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        ncShowImageUploadPopup(imgCell, prop, i, markDirty);
+                    });
+                    imgCell.appendChild(addBtn);
+                }
+            }
+            // Row selection
+            tr.classList.toggle('nc-row-selected', ncSelectedRow === i);
+            tr.addEventListener('click', (e) => {
+                if (e.target.closest('.nc-table-locate') || e.target.contentEditable === 'true' || e.target.tagName === 'SELECT') return;
+                ncSelectedRow = (ncSelectedRow === i) ? null : i;
+                body.querySelectorAll('tr').forEach(r => r.classList.remove('nc-row-selected'));
+                if (ncSelectedRow === i) tr.classList.add('nc-row-selected');
+            });
+        }
+
+        body.appendChild(tr);
+    });
+}
+
+// (Sort handlers are now built dynamically inside renderNCTable)
+
+// Image upload — shared helper
+async function ncUploadImageFile(file, prop, idx, markDirty, statusEl) {
+    if (statusEl) statusEl.textContent = 'Uploading...';
+    try {
+        const ext = file.name ? file.name.split('.').pop() : (file.type === 'image/png' ? 'png' : 'jpg');
+        const fname = `prop_${prop.id || idx}_${Date.now()}.${ext}`;
+        const uploadResp = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/nc-images/${fname}`, {
+            method: 'POST',
+            headers: {
+                'apikey': CONFIG.supabaseKey,
+                'Authorization': `Bearer ${currentAccessToken || CONFIG.supabaseKey}`,
+                'Content-Type': file.type
+            },
+            body: file
+        });
+        if (!uploadResp.ok) throw new Error(await uploadResp.text());
+        prop.image_url = `${CONFIG.supabaseUrl}/storage/v1/object/public/nc-images/${fname}`;
+        markDirty();
+        document.querySelectorAll('.nc-img-upload-popup').forEach(p => p.remove());
+        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+    } catch (err) {
+        console.error('Image upload failed:', err);
+        if (statusEl) statusEl.textContent = 'Upload failed!';
+    }
+}
+
+// Image upload popup — paste or browse
+function ncShowImageUploadPopup(cell, prop, idx, markDirty) {
+    document.querySelectorAll('.nc-img-upload-popup').forEach(p => p.remove());
+    const overlay = document.getElementById('ncTableOverlay');
+    const rect = cell.getBoundingClientRect();
+    const oRect = overlay.getBoundingClientRect();
+
+    const popup = document.createElement('div');
+    popup.className = 'nc-img-upload-popup';
+    popup.style.top = (rect.bottom - oRect.top + 4) + 'px';
+    popup.style.right = (oRect.right - rect.right) + 'px';
+
+    const pasteZone = document.createElement('div');
+    pasteZone.className = 'nc-paste-zone';
+    pasteZone.tabIndex = 0;
+    pasteZone.textContent = 'Click here & paste (Ctrl+V)';
+
+    const status = document.createElement('div');
+    status.className = 'nc-img-upload-status';
+
+    const browseBtn = document.createElement('button');
+    browseBtn.className = 'nc-img-browse-btn';
+    browseBtn.textContent = 'Browse File';
+    browseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.addEventListener('change', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            await ncUploadImageFile(file, prop, idx, markDirty, status);
+        });
+        fileInput.click();
+    });
+
+    pasteZone.addEventListener('paste', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) {
+                    await ncUploadImageFile(file, prop, idx, markDirty, status);
+                    return;
+                }
+            }
+        }
+        status.textContent = 'No image in clipboard';
+    });
+
+    popup.appendChild(pasteZone);
+    popup.appendChild(browseBtn);
+    popup.appendChild(status);
+    overlay.appendChild(popup);
+
+    // Auto-focus so paste works immediately
+    pasteZone.focus();
+
+    // Close on outside click
+    setTimeout(() => {
+        const closer = (ev) => {
+            if (!popup.contains(ev.target)) {
+                popup.remove();
+                document.removeEventListener('mousedown', closer);
+            }
+        };
+        document.addEventListener('mousedown', closer);
+    }, 0);
+}
+
+// Cell expand popup — click truncated text to see full value + edit
+function ncShowCellPopup(td, prop, field, idx) {
+    // Remove any existing popup
+    document.querySelectorAll('.nc-cell-popup').forEach(p => p.remove());
+
+    const popup = document.createElement('div');
+    popup.className = 'nc-cell-popup';
+
+    const labels = { name: 'Name', owner: 'Owner', address: 'Address' };
+    const label = document.createElement('div');
+    label.className = 'nc-cell-popup-label';
+    label.textContent = labels[field] || field;
+    popup.appendChild(label);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'nc-cell-popup-input';
+    input.value = prop[field] || '';
+    popup.appendChild(input);
+
+    const btns = document.createElement('div');
+    btns.className = 'nc-cell-popup-btns';
+
+    if (ncCanEdit()) {
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'nc-toolbar-btn primary';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.fontSize = '0.6rem';
+        saveBtn.style.padding = '0.25rem 0.5rem';
+        saveBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newVal = input.value.trim();
+            if (newVal !== (prop[field] || '')) {
+                prop[field] = newVal || null;
+                try {
+                    if (prop.id && field !== 'discord_contact') {
+                        await supabaseUpdate('nc_properties', prop.id, { [field]: prop[field], updated_at: new Date().toISOString() });
+                    }
+                    td.textContent = newVal || '';
+                } catch (err) {
+                    console.error('Save failed:', err);
+                    alert('Save failed: ' + err.message);
+                }
+            }
+            popup.remove();
+        });
+        btns.appendChild(saveBtn);
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'nc-toolbar-btn';
+    closeBtn.textContent = 'Close';
+    closeBtn.style.fontSize = '0.6rem';
+    closeBtn.style.padding = '0.25rem 0.5rem';
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); popup.remove(); });
+    btns.appendChild(closeBtn);
+    popup.appendChild(btns);
+
+    // Position near the cell
+    const rect = td.getBoundingClientRect();
+    const overlay = document.getElementById('ncTableOverlay');
+    const overlayRect = overlay.getBoundingClientRect();
+    popup.style.top = (rect.bottom - overlayRect.top + 4) + 'px';
+    popup.style.left = Math.max(8, rect.left - overlayRect.left) + 'px';
+
+    overlay.appendChild(popup);
+    input.focus();
+    input.select();
+
+    if (!ncCanEdit()) input.readOnly = true;
+
+    // Close on outside click
+    const outsideHandler = (e) => {
+        if (!popup.contains(e.target) && e.target !== td) {
+            popup.remove();
+            document.removeEventListener('click', outsideHandler);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', outsideHandler), 0);
+}
+
+// Table search
+document.getElementById('ncTableSearch').addEventListener('input', (e) => {
+    renderNCTable(ncProperties, e.target.value);
+});
+
+document.getElementById('ncTableBtn').addEventListener('click', () => {
+    const overlay = document.getElementById('ncTableOverlay');
+    overlay.classList.add('open');
+    ncUpdateToolbar();
+    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+});
+
+// (ncTableClose handler is in toolbar section above)
+
+// Infinite scroll on bottom panel
+(function setupInfiniteScroll() {
+    const list = document.getElementById('ncPanelList');
+    if (!list) return;
+    list.addEventListener('scroll', () => {
+        const { scrollLeft, scrollWidth, clientWidth } = list;
+        if (scrollLeft + clientWidth >= scrollWidth - 5) {
+            // At the end — clone all original cards and append
+            const origCards = list.querySelectorAll('.nc-panel-card:not(.nc-clone)');
+            origCards.forEach(card => {
+                const clone = card.cloneNode(true);
+                clone.classList.add('nc-clone');
+                const idx = parseInt(card.dataset.index);
+                clone.dataset.index = idx;
+                clone.addEventListener('click', () => highlightNCProperty(idx, clone));
+                list.appendChild(clone);
+            });
+        }
+        if (scrollLeft <= 0) {
+            list.scrollLeft = 1;
+        }
+    });
+})();
+
+// ============================================
+// NC Table Toolbar — Edit, Save, Add Row, Delete, CSV Export
+// ============================================
+let ncEditMode = false;
+let ncHasUnsaved = false;
+let ncSelectedRow = null; // index of selected property
+let ncPendingAction = null; // callback if user discards unsaved changes
+
+function ncCanEdit() {
+    if (!currentUser) return false;
+    return isAdmin || (userProfile && userProfile.is_surveyor);
+}
+
+function ncUpdateToolbar() {
+    const editBtn = document.getElementById('ncEditToggleBtn');
+    const addBtn = document.getElementById('ncAddRowBtn');
+    const delBtn = document.getElementById('ncDeleteRowBtn');
+    if (!editBtn) return;
+
+    // Hide edit button entirely if user can't edit
+    editBtn.classList.toggle('hidden', !ncCanEdit());
+
+    if (ncEditMode) {
+        editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save`;
+        editBtn.classList.add('primary');
+        addBtn.classList.remove('hidden');
+        delBtn.classList.remove('hidden');
+    } else {
+        editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`;
+        editBtn.classList.remove('primary');
+        addBtn.classList.add('hidden');
+        delBtn.classList.add('hidden');
+    }
+}
+
+// Column visibility toggle popup
+document.getElementById('ncColToggleBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const popup = document.getElementById('ncColPopup');
+    popup.classList.toggle('open');
+    if (popup.classList.contains('open')) {
+        popup.innerHTML = '';
+        const labels = { name: 'Name', address: 'Address', owner: 'Owner', discord_contact: 'Discord', appraised_value: 'Value', type: 'Type', status: 'Status', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+        NC_TABLE_COLS.forEach(col => {
+            const label = document.createElement('label');
+            label.className = 'nc-col-option';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = ncVisibleCols.has(col);
+            cb.addEventListener('change', () => {
+                if (cb.checked) ncVisibleCols.add(col);
+                else ncVisibleCols.delete(col);
+                renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+            });
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(' ' + (labels[col] || col)));
+            popup.appendChild(label);
+        });
+    }
+});
+
+// Close popup when clicking elsewhere
+document.addEventListener('click', (e) => {
+    const popup = document.getElementById('ncColPopup');
+    if (popup && !popup.contains(e.target) && !e.target.closest('#ncColToggleBtn')) {
+        popup.classList.remove('open');
+    }
+});
+
+// Edit / Save toggle
+document.getElementById('ncEditToggleBtn').addEventListener('click', async () => {
+    if (!ncCanEdit()) return;
+    if (ncEditMode) {
+        // Save changes to Supabase
+        const editBtn = document.getElementById('ncEditToggleBtn');
+        editBtn.textContent = 'Saving...';
+        editBtn.disabled = true;
+        try {
+            for (const idx of ncDirtyRows) {
+                const prop = ncProperties[idx];
+                if (!prop) continue;
+                const row = {
+                    name: prop.name || null, type: prop.type || null, address: prop.address || null,
+                    owner: prop.owner || null,
+                    x: prop.x, z: prop.z, color: prop.color || null,
+                    sale_link: prop.sale_link || null, appraised_value: prop.appraised_value || null,
+                    status: prop.status || null, last_surveyed: prop.last_surveyed || null,
+                    image_url: prop.image_url || null, updated_at: new Date().toISOString()
+                };
+                if (prop.id) {
+                    await supabaseUpdate('nc_properties', prop.id, row);
+                } else {
+                    const result = await supabaseInsert('nc_properties', row);
+                    if (result?.[0]?.id) prop.id = result[0].id;
+                }
+            }
+            ncHasUnsaved = false;
+            ncDirtyRows.clear();
+            ncEditMode = false;
+            ncSelectedRow = null;
+            // Refresh markers and panel with saved data
+            renderNCMarkers(ncProperties);
+            renderNCPanel(ncProperties);
+        } catch (err) {
+            console.error('Save failed:', err);
+            alert('Save failed: ' + err.message);
+        }
+        editBtn.disabled = false;
+        ncUpdateToolbar();
+        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+    } else {
+        ncDirtyRows.clear();
+        ncEditMode = true;
+        ncUpdateToolbar();
+        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+    }
+});
+
+// Add Row
+document.getElementById('ncAddRowBtn').addEventListener('click', () => {
+    if (!ncEditMode) return;
+    ncProperties.push({ name: 'New Property', type: 'Residential', address: '', owner: '', discord_contact: null, x: 0, z: 0, color: '#888',
+        appraised_value: null, status: null, last_surveyed: null, image_url: null });
+    ncHasUnsaved = true;
+    ncDirtyRows.add(ncProperties.length - 1);
+    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+    // Scroll table to bottom
+    const wrap = document.querySelector('.nc-table-wrap');
+    if (wrap) setTimeout(() => wrap.scrollTop = wrap.scrollHeight, 50);
+});
+
+// Delete selected row
+document.getElementById('ncDeleteRowBtn').addEventListener('click', async () => {
+    if (!ncEditMode || ncSelectedRow === null) return;
+    const prop = ncProperties[ncSelectedRow];
+    if (prop?.id) {
+        try { await supabaseDelete('nc_properties', prop.id); }
+        catch (err) { console.error('Delete failed:', err); alert('Delete failed: ' + err.message); return; }
+    }
+    ncProperties.splice(ncSelectedRow, 1);
+    ncSelectedRow = null;
+    ncHasUnsaved = true;
+    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+});
+
+// Export CSV
+document.getElementById('ncExportBtn').addEventListener('click', () => {
+    const headers = ['Name', 'Address', 'Owner', 'Discord Contact', 'Appraised Value', 'Type', 'Status', 'Last Surveyed', 'X', 'Z', 'Image URL'];
+    const csvRows = [headers.join(',')];
+    ncProperties.forEach(p => {
+        csvRows.push([p.name, p.address, p.owner, p.discord_contact, p.appraised_value, p.type, p.status, p.last_surveyed, p.x, p.z, p.image_url].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'new-callisto-properties.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+});
+
+// Unsaved changes guard — table close button
+document.getElementById('ncTableClose').addEventListener('click', () => {
+    if (ncEditMode && ncHasUnsaved) {
+        ncPendingAction = () => {
+            ncEditMode = false;
+            ncHasUnsaved = false;
+            ncSelectedRow = null;
+            ncUpdateToolbar();
+            document.getElementById('ncTableOverlay').classList.remove('open');
+        };
+        document.getElementById('ncUnsavedModal').classList.add('open');
+    } else {
+        if (ncEditMode) {
+            ncEditMode = false;
+            ncSelectedRow = null;
+            ncUpdateToolbar();
+        }
+        document.getElementById('ncTableOverlay').classList.remove('open');
+    }
+});
+
+// Unsaved changes guard — page navigation
+const _origNavigateTo = navigateTo;
+navigateTo = function(path) {
+    if (ncEditMode && ncHasUnsaved) {
+        ncPendingAction = () => {
+            ncEditMode = false;
+            ncHasUnsaved = false;
+            ncSelectedRow = null;
+            ncUpdateToolbar();
+            document.getElementById('ncTableOverlay').classList.remove('open');
+            _origNavigateTo(path);
+        };
+        document.getElementById('ncUnsavedModal').classList.add('open');
+        return;
+    }
+    _origNavigateTo(path);
+};
+
+// Unsaved changes guard — browser beforeunload
+window.addEventListener('beforeunload', (e) => {
+    if (ncEditMode && ncHasUnsaved) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+// Modal buttons
+document.getElementById('ncUnsavedDiscard').addEventListener('click', () => {
+    document.getElementById('ncUnsavedModal').classList.remove('open');
+    if (ncPendingAction) { ncPendingAction(); ncPendingAction = null; }
+});
+document.getElementById('ncUnsavedCancel').addEventListener('click', () => {
+    document.getElementById('ncUnsavedModal').classList.remove('open');
+    ncPendingAction = null;
+});
 
 // ============================================
 // Init — Session bootstrap (replaces Supabase Auth)
