@@ -1419,12 +1419,19 @@
 
 
         /* Override Leaflet popup styling */
+        .leaflet-popup-pane { z-index: 1500 !important; }
+        .nc-map-view.popup-open .nc-bottom-bar,
+        .nc-map-view.popup-open .nc-status-legend,
+        .nc-map-view.popup-open .nc-legend {
+            z-index: 0 !important;
+            pointer-events: none;
+        }
         .leaflet-popup-content-wrapper {
             background: rgba(90, 90, 128, 0.98) !important;
             color: var(--text) !important;
-            border-radius: 8px !important;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
-            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 10px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+            border: 1px solid rgba(184, 180, 204, 0.25);
         }
 
         .leaflet-popup-tip {
@@ -1433,12 +1440,20 @@
 
         .leaflet-popup-close-button {
             color: var(--text-muted) !important;
+            font-size: 20px !important;
+            z-index: 2;
         }
 
+        .leaflet-popup-content { margin: 0 !important; width: auto !important; max-width: none !important; overflow: visible !important; }
         .nc-popup {
             font-family: 'Raleway', sans-serif;
             font-size: 0.85rem;
-            min-width: 200px;
+            width: 440px;
+            padding: 0;
+        }
+
+        .nc-popup-body {
+            padding: 0.8rem 1rem;
         }
 
         .nc-popup h3 {
@@ -1449,16 +1464,75 @@
             letter-spacing: 0.05em;
         }
 
-        .nc-popup .nc-prop-type {
-            font-size: 0.65rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
+        .nc-popup-editable {
+            cursor: pointer;
+            border-bottom: 1px dashed rgba(255,255,255,0.2);
+        }
+        .nc-popup-editable:hover {
+            border-bottom-color: var(--accent);
+        }
+        .nc-popup-inline-input {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 3px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: inherit;
+            font-weight: inherit;
+            padding: 0.1rem 0.3rem;
+            width: 100%;
+            outline: none;
+        }
+        .nc-popup-inline-input:focus {
+            border-color: var(--accent);
+            background: rgba(255,255,255,0.15);
+        }
+        h3 .nc-popup-inline-input {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.2rem;
+        }
+
+        .nc-popup .nc-prop-badges {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            gap: 0.4rem;
+            flex-wrap: nowrap;
+            overflow: visible;
+        }
+        .nc-popup .nc-prop-type,
+        .nc-popup .nc-prop-status-badge {
+            font-size: 0.62rem;
+            letter-spacing: 0.06em;
             padding: 0.15rem 0.5rem;
             border-radius: 3px;
             display: inline-block;
-            margin-bottom: 0.5rem;
             color: #fff;
+            white-space: nowrap;
         }
+        .nc-popup-type-dd,
+        .nc-popup-status-dd {
+            font-size: 0.62rem;
+            letter-spacing: 0.06em;
+            padding: 0.2rem 1.3rem 0.2rem 0.5rem;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            font-family: 'Raleway', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l3 3 3-3' stroke='rgba(255,255,255,0.8)' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.3rem center;
+            white-space: nowrap;
+        }
+        .nc-popup-type-dd:focus,
+        .nc-popup-status-dd:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+        .nc-popup-type-dd option,
+        .nc-popup-status-dd option { background: #3a3a5c; color: var(--text); text-transform: none; }
 
         .nc-popup .nc-prop-detail {
             display: flex;
@@ -1473,19 +1547,70 @@
             font-weight: 500;
             text-align: right;
         }
+        .nc-coords-copy {
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+        .nc-coords-copy:hover {
+            color: var(--accent);
+        }
+        .nc-copy-toast {
+            position: absolute;
+            bottom: 110%;
+            right: 0;
+            background: rgba(30, 30, 50, 0.95);
+            color: #fff;
+            font-size: 0.65rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            white-space: nowrap;
+            pointer-events: none;
+            animation: ncToastFade 1.5s ease forwards;
+            z-index: 10;
+        }
+        @keyframes ncToastFade {
+            0%, 70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .nc-popup-expand-toggle {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.4rem 0 0.2rem;
+            letter-spacing: 0.04em;
+            transition: color 0.15s;
+        }
+        .nc-popup-expand-toggle:hover { color: var(--text); }
+        .nc-expand-arrow {
+            display: inline-block;
+            transition: transform 0.2s;
+            font-size: 0.6rem;
+        }
+        .nc-popup.expanded .nc-expand-arrow { transform: rotate(180deg); }
+        .nc-popup-extra {
+            display: none;
+            padding-top: 0.2rem;
+        }
+        .nc-popup.expanded .nc-popup-extra { display: block; }
+
+        .nc-popup-actions {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.6rem;
+        }
 
         .nc-popup-edit-btn {
-            display: block;
-            width: 100%;
-            margin-top: 0.6rem;
-            padding: 0.4rem 0;
+            flex: 1;
+            padding: 0.4rem 0.3rem;
             background: rgba(184, 180, 204, 0.15);
             border: 1px solid rgba(184, 180, 204, 0.25);
             border-radius: 4px;
             color: var(--text);
             font-family: 'Raleway', sans-serif;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
+            font-size: 0.68rem;
+            letter-spacing: 0.03em;
             cursor: pointer;
             transition: background 0.15s, border-color 0.15s;
         }
@@ -1586,10 +1711,11 @@
         .nc-table-wrap {
             flex: 1;
             overflow: auto;
-            padding: 0;
+            padding: 0 0 2rem 0;
         }
 
         .nc-table {
+            min-width: 900px;
             width: 100%;
             border-collapse: collapse;
             font-family: 'Raleway', sans-serif;
@@ -1753,11 +1879,105 @@
         /* NC popup image */
         .nc-popup-img {
             width: 100%;
-            max-height: 140px;
-            object-fit: cover;
+            object-fit: contain;
             border-radius: 4px;
             margin-bottom: 0.5rem;
         }
+        .nc-popup-img-zone {
+            width: 100%;
+            height: 70px;
+            border: 2px dashed rgba(184, 180, 204, 0.3);
+            border-radius: 0;
+            margin-bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(255,255,255,0.03);
+            position: relative;
+            overflow: hidden;
+        }
+        .nc-popup-img-zone:hover {
+            border-color: var(--accent);
+            background: rgba(255,255,255,0.06);
+        }
+        .nc-popup-img-zone svg {
+            opacity: 0.4;
+            transition: opacity 0.2s;
+        }
+        .nc-popup-img-zone:hover svg { opacity: 0.7; }
+        .nc-popup-img-zone .nc-popup-img-hint {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            opacity: 0.5;
+            margin-left: 0.5rem;
+        }
+        .nc-popup-img-zone:hover .nc-popup-img-hint { opacity: 0.8; }
+        .nc-popup-img-zone .nc-popup-img-status {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            position: absolute;
+            bottom: 4px;
+        }
+        .nc-popup-img-wrap {
+            position: relative;
+            margin-bottom: 0;
+        }
+        .nc-popup-img-wrap img {
+            width: 100%;
+            display: block;
+            border-radius: 10px 10px 0 0;
+            max-height: 213px;
+            object-fit: cover;
+        }
+
+        /* Portrait image layout: image on left, content on right */
+        .nc-popup.nc-popup-portrait {
+            display: flex;
+            flex-direction: row;
+            width: 560px;
+        }
+        .nc-popup-portrait .nc-popup-img-wrap {
+            flex: 0 0 33%;
+            max-width: 33%;
+        }
+        .nc-popup-portrait .nc-popup-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px 0 0 10px;
+            max-height: none;
+        }
+        .nc-popup-portrait .nc-popup-body {
+            flex: 1;
+            min-width: 0;
+        }
+        .nc-popup-img-actions {
+            position: absolute;
+            top: 34px;
+            right: 4px;
+            display: flex;
+            gap: 3px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .nc-popup-img-wrap:hover .nc-popup-img-actions { opacity: 1; }
+        .nc-popup-img-action {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            border: none;
+            background: rgba(30, 30, 50, 0.85);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+        .nc-popup-img-action:hover { background: rgba(30, 30, 50, 0.95); color: var(--text); }
 
         .nc-img-cell {
             text-align: center;
@@ -2049,6 +2269,285 @@
             margin-bottom: 1.2rem;
         }
         .nc-unsaved-modal-box .btns { display: flex; gap: 0.5rem; justify-content: center; }
+
+        /* Surveyor's Log Modal */
+        .nc-log-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 2100;
+            background: rgba(0,0,0,0.65);
+            align-items: center;
+            justify-content: center;
+        }
+        .nc-log-modal.open { display: flex; }
+        .nc-log-modal-box {
+            background: rgba(55, 55, 80, 0.98);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 8px;
+            width: 420px;
+            max-width: 92vw;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .nc-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.2rem;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+        }
+        .nc-log-header h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1rem;
+            color: var(--text);
+            margin: 0;
+        }
+        .nc-log-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.4rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 0.2rem;
+        }
+        .nc-log-close:hover { color: var(--text); }
+        .nc-log-note-form {
+            padding: 0.6rem 1.2rem;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+            display: none;
+        }
+        .nc-log-note-form.open { display: block; }
+        .nc-log-note-form input {
+            width: 100%;
+            background: rgba(90, 90, 128, 0.5);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.78rem;
+            padding: 0.4rem 0.6rem;
+            margin-bottom: 0.4rem;
+        }
+        .nc-log-note-form input:focus { outline: none; border-color: var(--accent); }
+        .nc-log-body {
+            overflow-y: auto;
+            padding: 0.8rem 1.2rem;
+            flex: 1;
+        }
+        .nc-log-entry {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.1);
+        }
+        .nc-log-entry:last-child { border-bottom: none; }
+        .nc-log-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.3rem;
+            margin-bottom: 0.25rem;
+        }
+        .nc-log-date {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        .nc-log-user {
+            font-size: 0.7rem;
+            color: var(--accent);
+        }
+        .nc-log-desc {
+            font-size: 0.78rem;
+            color: var(--text);
+            line-height: 1.4;
+        }
+        .nc-log-old {
+            color: #d4a0a0;
+            text-decoration: line-through;
+        }
+        .nc-log-new {
+            color: #a8d4a0;
+        }
+        .nc-log-actions {
+            display: inline-flex;
+            gap: 0.25rem;
+        }
+        .nc-log-edit-btn,
+        .nc-log-del-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.15rem;
+            opacity: 0.35;
+            transition: opacity 0.15s, color 0.15s;
+            line-height: 1;
+            color: var(--text-muted);
+            display: inline-flex;
+            align-items: center;
+        }
+        .nc-log-edit-btn svg,
+        .nc-log-del-btn svg {
+            pointer-events: none;
+        }
+        .nc-log-edit-btn:hover,
+        .nc-log-del-btn:hover {
+            opacity: 1;
+        }
+        .nc-log-del-btn:hover { color: #d4a0a0; }
+        .nc-log-edit-btn:hover { color: #a0b8d4; }
+
+        /* Popup status select */
+        .nc-status-select-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nc-popup-status-select {
+            flex: 1;
+            background: rgba(90, 90, 128, 0.6);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.4rem;
+            cursor: pointer;
+        }
+        .nc-popup-status-select:focus { outline: none; border-color: var(--accent); }
+        .nc-popup-status-select option { background: #3a3a5c; color: var(--text); }
+
+        /* Table log button */
+        .nc-table-log {
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.2rem 0.4rem;
+            font-size: 0.65rem;
+            font-family: 'Raleway', sans-serif;
+            letter-spacing: 0.03em;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .nc-table-log:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Transaction Log form */
+        .nc-txn-modal-box { width: 440px; }
+        .nc-txn-form {
+            padding: 0.8rem 1.2rem;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+            display: none;
+        }
+        .nc-txn-form.open { display: block; }
+        .nc-txn-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .nc-txn-row label {
+            width: 60px;
+            flex-shrink: 0;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .nc-txn-row input {
+            flex: 1;
+            background: rgba(90, 90, 128, 0.5);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.78rem;
+            padding: 0.35rem 0.5rem;
+        }
+        .nc-txn-row input:focus { outline: none; border-color: var(--accent); }
+        .nc-txn-save-btn {
+            display: block;
+            width: 100%;
+            margin-top: 0.4rem;
+            padding: 0.45rem 0;
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.4);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .nc-txn-save-btn:hover {
+            background: rgba(76, 175, 80, 0.35);
+            border-color: rgba(76, 175, 80, 0.6);
+        }
+        .nc-txn-save-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Transaction log entries */
+        .nc-txn-entry {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.1);
+        }
+        .nc-txn-entry:last-child { border-bottom: none; }
+        .nc-txn-detail {
+            font-size: 0.75rem;
+            color: var(--text);
+            line-height: 1.5;
+        }
+        .nc-txn-detail span.lbl {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .nc-txn-amount {
+            color: #a8d4a0;
+            font-weight: 500;
+        }
+        .nc-txn-actions {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.35rem;
+        }
+        .nc-txn-actions button {
+            font-size: 0.62rem;
+            font-family: 'Raleway', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            color: var(--text-muted);
+        }
+        .nc-txn-edit-btn {
+            background: rgba(100, 149, 237, 0.15);
+            border: 1px solid rgba(100, 149, 237, 0.3);
+        }
+        .nc-txn-edit-btn:hover {
+            background: rgba(100, 149, 237, 0.3);
+            color: var(--text);
+        }
+        .nc-txn-del-btn {
+            background: rgba(212, 160, 160, 0.15);
+            border: 1px solid rgba(212, 160, 160, 0.3);
+        }
+        .nc-txn-del-btn:hover {
+            background: rgba(212, 160, 160, 0.3);
+            color: #d4a0a0;
+        }
+        .nc-txn-notes {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-style: italic;
+            margin-top: 0.15rem;
+        }
 
         .nc-panel {
             position: absolute;
@@ -2395,7 +2894,7 @@
         <div class="nc-bottom-bar">
             <div class="nc-bottom-btns">
                 <button class="nc-label-toggle" id="ncLabelToggle">Show Labels</button>
-                <button class="nc-label-toggle" id="ncUnoccupiedFilter">Show Occupied</button>
+                <button class="nc-label-toggle" id="ncUnoccupiedFilter">Hide Occupied</button>
             </div>
             <div class="nc-search">
                 <input type="text" id="ncSearchInput" placeholder="Search by name, owner, address, or type...">
@@ -2418,6 +2917,63 @@
                 <button class="nc-toolbar-btn" id="ncUnsavedCancel">Go Back</button>
                 <button class="nc-toolbar-btn danger" id="ncUnsavedDiscard">Discard</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Surveyor's Log Modal -->
+    <div class="nc-log-modal" id="ncLogModal">
+        <div class="nc-log-modal-box">
+            <div class="nc-log-header">
+                <h3 id="ncLogTitle">Surveyor's Log</h3>
+                <button class="nc-log-close" id="ncLogClose">&times;</button>
+            </div>
+            <div class="nc-log-note-form" id="ncLogNoteForm">
+                <input type="text" id="ncLogNoteInput" placeholder="Add a surveyor's note...">
+                <button class="nc-txn-save-btn" id="ncLogNoteSaveBtn">Add Note</button>
+            </div>
+            <div class="nc-log-body" id="ncLogBody"></div>
+        </div>
+    </div>
+
+    <!-- Transaction Log Modal -->
+    <div class="nc-log-modal" id="ncTxnModal">
+        <div class="nc-log-modal-box nc-txn-modal-box">
+            <div class="nc-log-header">
+                <h3 id="ncTxnTitle">Transaction Log</h3>
+                <button class="nc-log-close" id="ncTxnClose">&times;</button>
+            </div>
+            <div class="nc-txn-form" id="ncTxnForm">
+                <div class="nc-txn-row">
+                    <label>Seller</label>
+                    <input type="text" id="ncTxnSeller" placeholder="Seller name">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Buyer</label>
+                    <input type="text" id="ncTxnBuyer" placeholder="Buyer name (becomes new owner)">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Broker</label>
+                    <input type="text" id="ncTxnBroker" value="New Callisto City Government" placeholder="Broker">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Amount</label>
+                    <input type="number" id="ncTxnAmount" placeholder="Sale price">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Date</label>
+                    <input type="date" id="ncTxnDate">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Rename</label>
+                    <input type="text" id="ncTxnRename" placeholder="Optional — new property name">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Notes</label>
+                    <input type="text" id="ncTxnNotes" placeholder="Optional notes">
+                </div>
+                <button class="nc-txn-save-btn" id="ncTxnSaveBtn">Record Transaction</button>
+            </div>
+            <div class="nc-log-body" id="ncTxnBody"></div>
         </div>
     </div>
 
@@ -2466,6 +3022,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=63"></script>
+    <script src="app.js?v=95"></script>
 </body>
 </html>
