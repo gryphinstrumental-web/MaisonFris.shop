@@ -1209,7 +1209,27 @@ async function loadNewCallisto() {
             });
         }
 
-        // Inline-editable fields (name, address)
+        // Signage / Shopchests toggle in popup
+        container.querySelectorAll('.nc-popup-toggle').forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', async () => {
+                const pi = parseInt(el.dataset.pi);
+                const field = el.dataset.field;
+                const prop = ncProperties[pi];
+                const oldVal = prop[field];
+                prop[field] = !prop[field];
+                el.textContent = prop[field] ? '\u2705' : '\u274C';
+                if (prop.id) {
+                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                        method: 'PATCH', headers: restHeaders(),
+                        body: JSON.stringify({ [field]: prop[field], updated_at: new Date().toISOString() })
+                    });
+                    ncLogChange(prop.id, field, String(oldVal), String(prop[field]));
+                }
+            });
+        });
+
+        // Inline-editable fields (name, address, hs_account)
         const pendingEdits = []; // track active inputs for save-on-close
         container.querySelectorAll('.nc-popup-editable').forEach(el => {
             el.addEventListener('click', () => {
@@ -1415,6 +1435,20 @@ function renderNCMarkers(properties) {
         if (prop.discord_contact) popupHTML += `<div class="nc-prop-detail"><span>Discord</span><span class="value">${prop.discord_contact}</span></div>`;
         popupHTML += `<div class="nc-prop-detail"><span>Coords</span><span class="value nc-coords-copy" data-coords="${prop.x}, ${prop.z}" title="Click to copy">${prop.x}, ${prop.z}</span></div>`;
         if (prop.appraised_value) popupHTML += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
+        // Signage & Shopchests
+        if (canEdit) {
+            popupHTML += `<div class="nc-prop-detail"><span>Signage</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="signage">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
+            popupHTML += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="shopchests">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
+        } else {
+            popupHTML += `<div class="nc-prop-detail"><span>Signage</span><span class="value">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
+            popupHTML += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
+        }
+        // HS Account
+        if (canEdit) {
+            popupHTML += `<div class="nc-prop-detail"><span>Bank</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="hs_account" title="Click to edit">${prop.hs_account || '—'}</span></div>`;
+        } else if (prop.hs_account) {
+            popupHTML += `<div class="nc-prop-detail"><span>Bank</span><span class="value">${prop.hs_account}</span></div>`;
+        }
         if (prop.last_surveyed) popupHTML += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
         if (prop.sale_link) popupHTML += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
 
@@ -1731,7 +1765,7 @@ document.getElementById('ncStatusShowAll').addEventListener('click', () => {
 
 // Table view
 let ncTableSort = { col: null, asc: true };
-const NC_TABLE_COLS = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'type', 'status', 'last_surveyed', 'x', 'z'];
+const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_account', 'appraised_value', 'tenant', 'type', 'status', 'signage', 'shopchests', 'last_surveyed', 'x', 'z'];
 const NC_STATUS_COLORS = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
 let ncDirtyRows = new Set(); // track modified property ids/indices for save
 let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
@@ -1768,10 +1802,12 @@ function renderNCTable(properties, filter = '') {
     const thead = document.querySelector('#ncTable thead tr');
     if (thead) {
         thead.innerHTML = '';
+        // Locate column first (far left)
+        const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
         NC_TABLE_COLS.forEach((col, ci) => {
             const th = document.createElement('th');
             if (!ncVisibleCols.has(col)) { th.style.display = 'none'; }
-            const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', appraised_value: 'Value', type: 'Type', status: 'Status', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+            const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
             th.textContent = labels[col] || col;
             th.classList.toggle('sorted', ncTableSort.col === ci);
             const arrow = document.createElement('span');
@@ -1785,11 +1821,10 @@ function renderNCTable(properties, filter = '') {
             });
             thead.appendChild(th);
         });
-        // Image + txn + log + locate columns
+        // Image + txn + log columns
         const imgTh = document.createElement('th'); imgTh.textContent = ''; thead.appendChild(imgTh);
         const txnTh = document.createElement('th'); txnTh.textContent = 'Txn'; thead.appendChild(txnTh);
         const logTh = document.createElement('th'); logTh.textContent = 'Log'; thead.appendChild(logTh);
-        const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
     }
 
     rows.forEach(({ prop, i }) => {
@@ -1799,22 +1834,27 @@ function renderNCTable(properties, filter = '') {
         const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
         const sc = NC_STATUS_COLORS[prop.status] || '#888';
         const vis = col => ncVisibleCols.has(col) ? '' : ' style="display:none"';
+        const signIcon = prop.signage ? '\u2705' : '\u274C';
+        const shopIcon = prop.shopchests ? '\u2705' : '\u274C';
         tr.innerHTML = `
+            <td><button class="nc-table-locate" title="Show on map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></button></td>
             <td data-field="name"${vis('name')}>${prop.name || 'Unnamed'}</td>
             <td data-field="address"${vis('address')}>${prop.address || ''}</td>
             <td data-field="owner"${vis('owner')}>${prop.owner || ''}</td>
-            <td data-field="tenant"${vis('tenant')}>${prop.tenant || ''}</td>
             <td data-field="discord_contact"${vis('discord_contact')}>${prop.discord_contact || ''}</td>
+            <td data-field="hs_account"${vis('hs_account')}>${prop.hs_account || ''}</td>
             <td data-field="appraised_value"${vis('appraised_value')}>${prop.appraised_value != null ? prop.appraised_value : ''}</td>
+            <td data-field="tenant"${vis('tenant')}>${prop.tenant || ''}</td>
             <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${prop.type}</span>` : ''}</td>
             <td data-field="status"${vis('status')}>${prop.status ? `<span class="nc-status-badge" style="background:${sc};">${prop.status}</span>` : ''}</td>
+            <td data-field="signage"${vis('signage')}><span class="nc-binary-icon">${signIcon}</span></td>
+            <td data-field="shopchests"${vis('shopchests')}><span class="nc-binary-icon">${shopIcon}</span></td>
             <td data-field="last_surveyed"${vis('last_surveyed')}>${fmtDate(prop.last_surveyed)}</td>
             <td data-field="x"${vis('x')}>${prop.x}</td>
             <td data-field="z"${vis('z')}>${prop.z}</td>
             <td class="nc-img-cell">${prop.image_url ? '<span class="nc-has-img" title="Has image">&#x1f5bc;</span>' : '<span class="nc-no-img">—</span>'}</td>
             <td><button class="nc-table-log nc-table-txn" data-prop-idx="${i}" title="Transaction Log">Txn</button></td>
             <td><button class="nc-table-log" data-prop-idx="${i}" title="Surveyor's Log">Log</button></td>
-            <td><button class="nc-table-locate" title="Show on map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></button></td>
         `;
 
         // Locate button
@@ -1893,6 +1933,37 @@ function renderNCTable(properties, filter = '') {
                         if (prop.status !== (sel.value || null)) { prop.status = sel.value || null; markDirty(); }
                     });
                     td.appendChild(sel);
+                    return;
+                }
+                // Signage / Shopchests get toggle buttons
+                if (field === 'signage' || field === 'shopchests') {
+                    td.innerHTML = '';
+                    td.style.textAlign = 'center';
+                    const btn = document.createElement('button');
+                    btn.className = 'nc-binary-toggle';
+                    btn.textContent = prop[field] ? '\u2705' : '\u274C';
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        prop[field] = !prop[field];
+                        btn.textContent = prop[field] ? '\u2705' : '\u274C';
+                        markDirty();
+                    });
+                    td.appendChild(btn);
+                    return;
+                }
+                // HS Account gets text input with placeholder
+                if (field === 'hs_account') {
+                    td.innerHTML = '';
+                    const inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.className = 'nc-text-input';
+                    inp.value = prop.hs_account || '';
+                    inp.placeholder = 'HS-XXXX';
+                    inp.addEventListener('change', () => {
+                        prop.hs_account = inp.value.trim() || null;
+                        markDirty();
+                    });
+                    td.appendChild(inp);
                     return;
                 }
                 // Date field gets date input
@@ -2656,7 +2727,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
         const editBtn = document.getElementById('ncEditToggleBtn');
         editBtn.textContent = 'Saving...';
         editBtn.disabled = true;
-        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'type', 'status', 'last_surveyed', 'x', 'z', 'image_url'];
+        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'type', 'status', 'signage', 'shopchests', 'hs_account', 'last_surveyed', 'x', 'z', 'image_url'];
         try {
             for (const idx of ncDirtyRows) {
                 const prop = ncProperties[idx];
@@ -2664,9 +2735,12 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
                 const row = {
                     name: prop.name || null, type: prop.type || null, address: prop.address || null,
                     owner: prop.owner || null, tenant: prop.tenant || null,
+                    discord_contact: prop.discord_contact || null,
                     x: prop.x, z: prop.z, color: prop.color || null,
                     sale_link: prop.sale_link || null, appraised_value: prop.appraised_value || null,
                     status: prop.status || null, last_surveyed: prop.last_surveyed || null,
+                    signage: prop.signage || false, shopchests: prop.shopchests || false,
+                    hs_account: prop.hs_account || null,
                     image_url: prop.image_url || null, updated_at: new Date().toISOString()
                 };
                 const isNew = !prop.id;

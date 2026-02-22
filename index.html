@@ -2234,9 +2234,33 @@
         }
 
         .nc-date-input:focus,
-        .nc-num-input:focus {
+        .nc-num-input:focus,
+        .nc-text-input:focus {
             outline: none;
             border-color: var(--accent);
+        }
+        .nc-text-input {
+            background: rgba(90, 90, 128, 0.3);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 3px;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.4rem;
+            width: 80px;
+        }
+        .nc-binary-icon {
+            font-size: 0.85rem;
+        }
+        .nc-binary-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 0.1rem 0.3rem;
+        }
+        .nc-binary-toggle:hover {
+            opacity: 0.7;
         }
 
         .nc-unsaved-modal {
@@ -3022,6 +3046,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=95"></script>
+    <script src="app.js?v=98"></script>
 </body>
 </html>
