@@ -2573,6 +2573,76 @@
             margin-top: 0.15rem;
         }
 
+        /* Fine Log Modal */
+        .nc-fine-modal-box { width: 460px; }
+        .nc-fine-form {
+            padding: 0.8rem 1.2rem;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+            display: none;
+        }
+        .nc-fine-form.open { display: block; }
+        .nc-fine-presets {
+            display: flex;
+            gap: 0.3rem;
+            margin-bottom: 0.5rem;
+        }
+        .nc-fine-preset-btn {
+            padding: 0.3rem 0.6rem;
+            background: rgba(212, 160, 160, 0.15);
+            border: 1px solid rgba(212, 160, 160, 0.3);
+            border-radius: 4px;
+            color: var(--text-muted);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .nc-fine-preset-btn:hover {
+            background: rgba(212, 160, 160, 0.3);
+            color: var(--text);
+        }
+        .nc-fine-preset-btn.active {
+            background: rgba(212, 160, 160, 0.4);
+            border-color: rgba(212, 160, 160, 0.6);
+            color: var(--text);
+        }
+        .nc-fine-status {
+            display: inline-block;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .nc-fine-status.pending { background: rgba(230, 168, 23, 0.25); color: #e6a817; }
+        .nc-fine-status.paid { background: rgba(76, 175, 80, 0.25); color: #4caf50; }
+        .nc-fine-status.waived { background: rgba(184, 180, 204, 0.25); color: var(--text-muted); }
+        .nc-fine-bounty {
+            font-size: 0.68rem;
+            color: #a0b8d4;
+            font-style: italic;
+        }
+
+        /* Ordinance Modal */
+        .nc-ordinance-modal-box { width: 520px; max-height: 80vh; }
+        .nc-ordinance-body {
+            overflow-y: auto;
+            padding: 1.2rem;
+            font-size: 0.78rem;
+            line-height: 1.7;
+            color: var(--text);
+        }
+        .nc-ordinance-body h4 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.95rem;
+            color: var(--accent);
+            margin: 1rem 0 0.4rem;
+        }
+        .nc-ordinance-body h4:first-child { margin-top: 0; }
+        .nc-ordinance-body p { margin-bottom: 0.5rem; }
+        .nc-ordinance-body ul { padding-left: 1.2rem; margin-bottom: 0.5rem; }
+        .nc-ordinance-body li { margin-bottom: 0.2rem; }
+
         .nc-panel {
             position: absolute;
             bottom: 0;
@@ -2877,6 +2947,7 @@
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     Add Row
                 </button>
+                <button class="nc-toolbar-btn" id="ncOccupancyBtn" title="Filter by occupancy">Show All</button>
                 <div style="position:relative;">
                     <button class="nc-toolbar-btn" id="ncColToggleBtn" title="Show/hide columns">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
@@ -2919,6 +2990,7 @@
             <div class="nc-bottom-btns">
                 <button class="nc-label-toggle" id="ncLabelToggle">Show Labels</button>
                 <button class="nc-label-toggle" id="ncUnoccupiedFilter">Hide Occupied</button>
+                <button class="nc-label-toggle" id="ncOrdinanceBtn">Ordinances</button>
             </div>
             <div class="nc-search">
                 <input type="text" id="ncSearchInput" placeholder="Search by name, owner, address, or type...">
@@ -3001,6 +3073,89 @@
         </div>
     </div>
 
+    <!-- Fine Log Modal -->
+    <div class="nc-log-modal" id="ncFineModal">
+        <div class="nc-log-modal-box nc-fine-modal-box">
+            <div class="nc-log-header">
+                <h3 id="ncFineTitle">Fine Log</h3>
+                <button class="nc-log-close" id="ncFineClose">&times;</button>
+            </div>
+            <div class="nc-fine-form" id="ncFineForm">
+                <div class="nc-fine-presets">
+                    <button class="nc-fine-preset-btn" data-amount="10">10d</button>
+                    <button class="nc-fine-preset-btn" data-amount="30">30d</button>
+                    <button class="nc-fine-preset-btn" data-amount="50">50d</button>
+                </div>
+                <div class="nc-txn-row">
+                    <label>Amount</label>
+                    <input type="number" id="ncFineAmount" placeholder="Fine amount">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Reason</label>
+                    <input type="text" id="ncFineReason" placeholder="e.g., Missing shop chests">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Reporter</label>
+                    <input type="text" id="ncFineReporter" placeholder="Who reported? (for bounty)">
+                </div>
+                <div class="nc-txn-row">
+                    <label>Notes</label>
+                    <input type="text" id="ncFineNotes" placeholder="Optional notes">
+                </div>
+                <button class="nc-txn-save-btn" id="ncFineSaveBtn">Apply Fine</button>
+            </div>
+            <div class="nc-log-body" id="ncFineBody"></div>
+        </div>
+    </div>
+
+    <!-- Ordinance Modal -->
+    <div class="nc-log-modal" id="ncOrdinanceModal">
+        <div class="nc-log-modal-box nc-ordinance-modal-box">
+            <div class="nc-log-header">
+                <h3>Commercial Ordinances</h3>
+                <button class="nc-log-close" id="ncOrdinanceClose">&times;</button>
+            </div>
+            <div class="nc-ordinance-body">
+                <p style="color:var(--text-muted);font-size:0.68rem;margin-bottom:0.8rem;">Superseding All Prior City Council Resolutions &mdash; Effective March 2026</p>
+                <p>Owning a commercial property in New Callisto means you agree to everything below and any subsequent Resolutions and Ordinances posted in the Discord linked at the bottom of the page.</p>
+
+                <h4>Ownership Qualifications</h4>
+                <p>New owners must be individuals with a responsive discord account and in good standing.</p>
+
+                <h4>New Callisto Property Trust</h4>
+                <p>Upon ownership of a new property, deposit <strong>60 diamonds</strong> into Monument Bank account <strong>HS-7502</strong>. Cash deposits are available for a 10 diamond fee.</p>
+                <p>A <strong>10 diamond registration fee</strong> is deducted from this deposit paid to the City. The remaining is invested into a Council-operated investment trust. When you sell or transfer ownership, you receive your proportional share of the Trust's total value at that time directly.</p>
+
+                <h4>Property Standards</h4>
+                <p>These are the only fineable offenses:</p>
+                <ul>
+                    <li>At least one <strong>stocked shop chest</strong> at all times with public accessibility.</li>
+                    <li>Complete, updated <strong>registry information</strong> and a reinforced glowing sign or hanging sign on the IF-CapitalBuilder group near shop entrance with: shop name, address, and coordinates.</li>
+                </ul>
+
+                <h4>Fine Structure</h4>
+                <ul>
+                    <li><strong>10d</strong> &mdash; initial fine upon notice (waived if addressed within 24 hours)</li>
+                    <li><strong>30d</strong> &mdash; if not fixed within a week of notice</li>
+                    <li><strong>50d</strong> &mdash; accruing weekly thereafter, potential forfeiture</li>
+                </ul>
+                <p>Fines are automatically deducted from your Property Trust deposit. Failure to replenish deposit balance more than a month prior to sale forfeits remaining deposit upon sale.</p>
+
+                <h4>Bounty</h4>
+                <p>Any property owner can report a violation to a city official. If confirmed and still present after 24 hours, the reporter gets <strong>half of any recovered fine</strong>.</p>
+
+                <h4>Sublease &amp; Subdivision</h4>
+                <p>Owners are responsible for tenants. Fines are applied to owners. No subdivision or partial sales of properties. Properties may be combined with council approval.</p>
+
+                <h4>Eminent Domain</h4>
+                <p>The Council may seize commercial property. Compensation is either cash value based on comparables, or an alternative commercial property.</p>
+
+                <h4>Communication</h4>
+                <p>All time periods are activated via Discord ping. If no direct Discord is deliverable, notifications are publicly posted in the New Callisto City Council Channel.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Login Gate Modal -->
     <div class="order-modal" id="loginGateModal">
         <div class="order-form" style="text-align: center;">
@@ -3046,6 +3201,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=98"></script>
+    <script src="app.js?v=100"></script>
 </body>
 </html>
