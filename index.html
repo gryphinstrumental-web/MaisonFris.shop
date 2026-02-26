@@ -1554,6 +1554,8 @@
         .nc-coords-copy:hover {
             color: var(--accent);
         }
+        .nc-popup-copyable { cursor: pointer; border-bottom: 1px dashed rgba(184,180,204,0.3); }
+        .nc-popup-copyable:hover { color: var(--accent); }
         .nc-copy-toast {
             position: absolute;
             bottom: 110%;
@@ -1875,6 +1877,13 @@
         .nc-table th:hover { color: var(--text); }
         .nc-table th .sort-arrow { font-size: 0.6rem; margin-left: 0.3rem; opacity: 0.5; }
         .nc-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+        .nc-th-filter {
+            background: var(--card-bg); color: var(--text); border: 1px solid var(--border);
+            border-radius: 3px; font-size: 0.7rem; padding: 1px 2px; cursor: pointer;
+            max-width: 100%; appearance: none; -webkit-appearance: none;
+        }
+        .nc-th-filter:focus { outline: 1px solid var(--accent); }
+        .nc-th-filter option { background: var(--card-bg); color: var(--text); }
 
         /* NC popup image */
         .nc-popup-img {
@@ -2976,7 +2985,6 @@
             <div class="nc-legend-item" data-type="Residential"><span class="nc-legend-dot" style="background: #183dde;"></span> Residential</div>
             <div class="nc-legend-item" data-type="Commercial"><span class="nc-legend-dot" style="background: #2c7d27;"></span> Commercial</div>
             <div class="nc-legend-item" data-type="Government"><span class="nc-legend-dot" style="background: #9e42f5;"></span> Government</div>
-            <div class="nc-legend-item" data-type="Mixed Use"><span class="nc-legend-dot" style="background: #e6a817;"></span> Mixed Use</div>
             <div class="nc-legend-show-all" id="ncTypeShowAll">Show All</div>
         </div>
         <div class="nc-status-legend" id="ncStatusLegend">

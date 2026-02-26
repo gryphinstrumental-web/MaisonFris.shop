@@ -935,8 +935,7 @@ const NC_PROPERTY_JSON_URL = 'https://raw.githubusercontent.com/jalhf/New-Callis
 const NC_TYPE_COLORS = {
     'Residential': '#183dde',
     'Commercial': '#2c7d27',
-    'Government': '#9e42f5',
-    'Mixed Use': '#e6a817'
+    'Government': '#9e42f5'
 };
 
 async function loadNewCallisto() {
@@ -1011,7 +1010,8 @@ async function loadNewCallisto() {
             const zoom = ncMap.getZoom();
             const px = ncMap.project(latlng, zoom);
             const mapH = ncMap.getSize().y;
-            px.y -= (mapH / 2 - 90); // shift center up so marker sits just above carousel
+            const panelH = document.getElementById('ncPanel')?.offsetHeight || 120;
+            px.y -= (mapH / 2 - panelH - 80); // place popup well above carousel
             ncMap.panTo(ncMap.unproject(px, zoom));
         }
     });
@@ -1035,6 +1035,20 @@ async function loadNewCallisto() {
                 });
             });
         }
+        // Click-to-copy for name, owner, discord
+        el.querySelectorAll('.nc-popup-copyable').forEach(cel => {
+            cel.style.cursor = 'pointer';
+            cel.addEventListener('click', () => {
+                navigator.clipboard.writeText(cel.dataset.copy).then(() => {
+                    const tip = document.createElement('div');
+                    tip.className = 'nc-copy-toast';
+                    tip.textContent = 'Copied!';
+                    cel.style.position = 'relative';
+                    cel.appendChild(tip);
+                    setTimeout(() => tip.remove(), 1500);
+                });
+            });
+        });
     });
 
     // Detect portrait images and switch to side layout
@@ -1199,6 +1213,16 @@ async function loadNewCallisto() {
                 if (oldType === newType) return;
                 prop.type = newType;
                 typeDD.style.background = NC_TYPE_COLORS[newType] || '#888';
+                // Live-update marker color + compliance border
+                if (ncMarkers[pi]) {
+                    const compliance = ncGetCompliance(prop);
+                    ncMarkers[pi].setStyle({
+                        fillColor: NC_TYPE_COLORS[newType] || prop.color || '#888',
+                        color: (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
+                        weight: (compliance && !compliance.compliant) ? 2 : 1
+                    });
+                }
+                renderNCPanel(ncProperties);
                 if (prop.id) {
                     await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
                         method: 'PATCH', headers: restHeaders(),
@@ -1209,27 +1233,7 @@ async function loadNewCallisto() {
             });
         }
 
-        // Signage / Shopchests toggle in popup
-        container.querySelectorAll('.nc-popup-toggle').forEach(el => {
-            el.style.cursor = 'pointer';
-            el.addEventListener('click', async () => {
-                const pi = parseInt(el.dataset.pi);
-                const field = el.dataset.field;
-                const prop = ncProperties[pi];
-                const oldVal = prop[field];
-                prop[field] = !prop[field];
-                el.textContent = prop[field] ? '\u2705' : '\u274C';
-                if (prop.id) {
-                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                        method: 'PATCH', headers: restHeaders(),
-                        body: JSON.stringify({ [field]: prop[field], updated_at: new Date().toISOString() })
-                    });
-                    ncLogChange(prop.id, field, String(oldVal), String(prop[field]));
-                }
-            });
-        });
-
-        // Inline-editable fields (name, address, hs_account)
+        // Inline-editable fields (name, address)
         const pendingEdits = []; // track active inputs for save-on-close
         container.querySelectorAll('.nc-popup-editable').forEach(el => {
             el.addEventListener('click', () => {
@@ -1290,6 +1294,35 @@ async function loadNewCallisto() {
             await Promise.all(pendingEdits.map(({ save }) => save()));
             if (pendingEdits.some(({ input }) => input._changed)) {
                 renderNCMarkers(ncProperties);
+            }
+        });
+
+    });
+
+    // Log buttons + toggles — available to all users, not just admins
+    ncMap.on('popupopen', (e) => {
+        const container = e.popup.getElement();
+        if (!container) return;
+
+        // Signage / Shopchests toggle in popup (admin/surveyor can toggle + save)
+        container.querySelectorAll('.nc-popup-toggle').forEach(el => {
+            if (ncCanEdit()) {
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', async () => {
+                    const pi = parseInt(el.dataset.pi);
+                    const field = el.dataset.field;
+                    const prop = ncProperties[pi];
+                    const oldVal = prop[field];
+                    prop[field] = !prop[field];
+                    el.textContent = prop[field] ? '\u2705' : '\u274C';
+                    if (prop.id) {
+                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                            method: 'PATCH', headers: restHeaders(),
+                            body: JSON.stringify({ [field]: prop[field], updated_at: new Date().toISOString() })
+                        });
+                        ncLogChange(prop.id, field, String(oldVal), String(prop[field]));
+                    }
+                });
             }
         });
 
@@ -1418,7 +1451,7 @@ function renderNCMarkers(properties) {
         if (canEdit) {
             popupHTML += `<h3 class="nc-popup-editable" data-pi="${pi}" data-field="name" title="Click to edit">${prop.name || 'Unnamed Property'}</h3>`;
         } else {
-            popupHTML += `<h3>${prop.name || 'Unnamed Property'}</h3>`;
+            popupHTML += `<h3 class="nc-popup-copyable" data-copy="${(prop.name || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.name || 'Unnamed Property'}</h3>`;
         }
         {
             const curType = prop.type || 'Residential';
@@ -1445,34 +1478,15 @@ function renderNCMarkers(properties) {
         } else if (prop.address) {
             popupHTML += `<div class="nc-prop-detail"><span>Address</span><span class="value">${prop.address}</span></div>`;
         }
-        if (prop.owner) popupHTML += `<div class="nc-prop-detail"><span>Owner</span><span class="value">${prop.owner}</span></div>`;
+        if (prop.owner) popupHTML += `<div class="nc-prop-detail"><span>Owner</span><span class="value nc-popup-copyable" data-copy="${(prop.owner || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.owner}</span></div>`;
         if (prop.tenant) popupHTML += `<div class="nc-prop-detail"><span>Tenant</span><span class="value">${prop.tenant}</span></div>`;
-        if (prop.discord_contact) popupHTML += `<div class="nc-prop-detail"><span>Discord</span><span class="value">${prop.discord_contact}</span></div>`;
+        if (prop.discord_contact) popupHTML += `<div class="nc-prop-detail"><span>Discord</span><span class="value nc-popup-copyable" data-copy="${(prop.discord_contact || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.discord_contact}</span></div>`;
         popupHTML += `<div class="nc-prop-detail"><span>Coords</span><span class="value nc-coords-copy" data-coords="${prop.x}, ${prop.z}" title="Click to copy">${prop.x}, ${prop.z}</span></div>`;
         if (prop.appraised_value) popupHTML += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
-        // Signage & Shopchests
-        if (canEdit) {
+        // Signage, Shopchests (commercial only — always toggleable for admins/surveyors)
+        if (prop.type === 'Commercial') {
             popupHTML += `<div class="nc-prop-detail"><span>Signage</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="signage">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
             popupHTML += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="shopchests">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
-        } else {
-            popupHTML += `<div class="nc-prop-detail"><span>Signage</span><span class="value">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
-            popupHTML += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
-        }
-        // HS Account
-        if (canEdit) {
-            popupHTML += `<div class="nc-prop-detail"><span>Bank</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="hs_account" title="Click to edit">${prop.hs_account || '—'}</span></div>`;
-        } else if (prop.hs_account) {
-            popupHTML += `<div class="nc-prop-detail"><span>Bank</span><span class="value">${prop.hs_account}</span></div>`;
-        }
-        // Trust Deposit (commercial / mixed use only)
-        if (prop.type === 'Commercial' || prop.type === 'Mixed Use') {
-            const td = prop.trust_deposit ?? 0;
-            const trustColor = td >= 50 ? '#4caf50' : td > 0 ? '#e6a817' : '#e04040';
-            if (canEdit) {
-                popupHTML += `<div class="nc-prop-detail"><span>Trust</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="trust_deposit" title="Click to edit" style="color:${trustColor}">${td}d</span></div>`;
-            } else {
-                popupHTML += `<div class="nc-prop-detail"><span>Trust</span><span class="value" style="color:${trustColor}">${td}d</span></div>`;
-            }
         }
         // Compliance indicator (commercial / mixed use only)
         {
@@ -1481,7 +1495,7 @@ function renderNCMarkers(properties) {
                 const badge = comp.compliant
                     ? '<span style="background:rgba(76,175,80,0.25);color:#4caf50;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Compliant</span>'
                     : '<span style="background:rgba(224,64,64,0.25);color:#e04040;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Non-Compliant</span>';
-                const checkLabels = { owner: 'Owner', shopchests: 'Shop Chests', signage: 'Signage', hs_account: 'Bank', discord_contact: 'Discord' };
+                const checkLabels = { owner: 'Owner', shopchests: 'Shop Chests', signage: 'Signage', discord_contact: 'Discord' };
                 let detail = '';
                 for (const [key, ok] of Object.entries(comp.checks)) {
                     detail += `<span style="font-size:0.68rem;color:${ok ? '#4caf50' : '#e04040'};margin-right:0.4rem;">${ok ? '\u2705' : '\u274C'} ${checkLabels[key]}</span>`;
@@ -1497,9 +1511,7 @@ function renderNCMarkers(properties) {
         popupHTML += `<button class="nc-popup-edit-btn" onclick="ncEditPropertyInTable(${pi})">Edit in Table</button>`;
         popupHTML += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
         popupHTML += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
-        if (prop.type === 'Commercial' || prop.type === 'Mixed Use') {
-            popupHTML += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
-        }
+        popupHTML += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
         popupHTML += `</div>`;
         popupHTML += `</div>`; // end nc-popup-body
         popupHTML += `</div>`;
@@ -1815,6 +1827,8 @@ const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_accoun
 const NC_STATUS_COLORS = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
 let ncDirtyRows = new Set(); // track modified property ids/indices for save
 let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
+let ncTableFilterType = null;   // active type filter for table
+let ncTableFilterStatus = null; // active status filter for table
 
 function renderNCTable(properties, filter = '') {
     const body = document.getElementById('ncTableBody');
@@ -1838,6 +1852,14 @@ function renderNCTable(properties, filter = '') {
     } else if (ncOccupancyFilter === 'available') {
         rows = rows.filter(r => !r.prop.owner || !r.prop.owner.trim());
     }
+    // Filter by type
+    if (ncTableFilterType) {
+        rows = rows.filter(r => r.prop.type === ncTableFilterType);
+    }
+    // Filter by status
+    if (ncTableFilterStatus) {
+        rows = rows.filter(r => r.prop.status === ncTableFilterStatus);
+    }
 
     // Sort
     if (ncTableSort.col !== null) {
@@ -1856,21 +1878,49 @@ function renderNCTable(properties, filter = '') {
         thead.innerHTML = '';
         // Locate column first (far left)
         const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
+        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', trust_deposit: 'Trust', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
         NC_TABLE_COLS.forEach((col, ci) => {
             const th = document.createElement('th');
             if (!ncVisibleCols.has(col)) { th.style.display = 'none'; }
-            const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', trust_deposit: 'Trust', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
-            th.textContent = labels[col] || col;
-            th.classList.toggle('sorted', ncTableSort.col === ci);
-            const arrow = document.createElement('span');
-            arrow.className = 'sort-arrow';
-            arrow.textContent = ncTableSort.col === ci ? (ncTableSort.asc ? '\u25B2' : '\u25BC') : '\u25B4';
-            th.appendChild(arrow);
-            th.addEventListener('click', () => {
-                if (ncTableSort.col === ci) { ncTableSort.asc = !ncTableSort.asc; }
-                else { ncTableSort.col = ci; ncTableSort.asc = true; }
-                renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
-            });
+
+            // Type and Status columns get a filter dropdown
+            if (col === 'type' || col === 'status') {
+                const activeFilter = col === 'type' ? ncTableFilterType : ncTableFilterStatus;
+                const sel = document.createElement('select');
+                sel.className = 'nc-th-filter';
+                sel.innerHTML = `<option value="">${labels[col]}</option>`;
+                const values = col === 'type' ? Object.keys(NC_TYPE_COLORS) : Object.keys(NC_STATUS_COLORS);
+                values.forEach(v => { sel.innerHTML += `<option value="${v}"${activeFilter === v ? ' selected' : ''}>${v}</option>`; });
+                sel.addEventListener('change', () => {
+                    if (col === 'type') ncTableFilterType = sel.value || null;
+                    else ncTableFilterStatus = sel.value || null;
+                    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+                });
+                sel.addEventListener('click', e => e.stopPropagation()); // don't trigger sort
+                th.appendChild(sel);
+                th.classList.toggle('sorted', ncTableSort.col === ci);
+                const arrow = document.createElement('span');
+                arrow.className = 'sort-arrow';
+                arrow.textContent = ncTableSort.col === ci ? (ncTableSort.asc ? '\u25B2' : '\u25BC') : '\u25B4';
+                th.appendChild(arrow);
+                th.addEventListener('click', () => {
+                    if (ncTableSort.col === ci) { ncTableSort.asc = !ncTableSort.asc; }
+                    else { ncTableSort.col = ci; ncTableSort.asc = true; }
+                    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+                });
+            } else {
+                th.textContent = labels[col] || col;
+                th.classList.toggle('sorted', ncTableSort.col === ci);
+                const arrow = document.createElement('span');
+                arrow.className = 'sort-arrow';
+                arrow.textContent = ncTableSort.col === ci ? (ncTableSort.asc ? '\u25B2' : '\u25BC') : '\u25B4';
+                th.appendChild(arrow);
+                th.addEventListener('click', () => {
+                    if (ncTableSort.col === ci) { ncTableSort.asc = !ncTableSort.asc; }
+                    else { ncTableSort.col = ci; ncTableSort.asc = true; }
+                    renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+                });
+            }
             thead.appendChild(th);
         });
         // Image + txn + log + fine + compliance columns
@@ -1897,7 +1947,7 @@ function renderNCTable(properties, filter = '') {
             <td data-field="owner"${vis('owner')}>${prop.owner || ''}</td>
             <td data-field="discord_contact"${vis('discord_contact')}>${prop.discord_contact || ''}</td>
             <td data-field="hs_account"${vis('hs_account')}>${prop.hs_account || ''}</td>
-            <td data-field="trust_deposit"${vis('trust_deposit')}>${(prop.type === 'Commercial' || prop.type === 'Mixed Use') ? `<span style="color:${(prop.trust_deposit ?? 0) >= 50 ? '#4caf50' : (prop.trust_deposit ?? 0) > 0 ? '#e6a817' : '#e04040'}">${prop.trust_deposit != null ? prop.trust_deposit + 'd' : '0d'}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+            <td data-field="trust_deposit"${vis('trust_deposit')}>${(prop.type === 'Commercial') ? ((prop.trust_deposit === -1) ? '<span style="color:var(--text-muted);font-style:italic;">Waived</span>' : `<span style="color:${(prop.trust_deposit ?? 0) >= 50 ? '#4caf50' : (prop.trust_deposit ?? 0) > 0 ? '#e6a817' : '#e04040'}">${prop.trust_deposit ?? 0}d</span>`) : '<span style="color:var(--text-muted);">—</span>'}</td>
             <td data-field="appraised_value"${vis('appraised_value')}>${prop.appraised_value != null ? prop.appraised_value : ''}</td>
             <td data-field="tenant"${vis('tenant')}>${prop.tenant || ''}</td>
             <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${prop.type}</span>` : ''}</td>
@@ -1910,7 +1960,7 @@ function renderNCTable(properties, filter = '') {
             <td class="nc-img-cell">${prop.image_url ? '<span class="nc-has-img" title="Has image">&#x1f5bc;</span>' : '<span class="nc-no-img">—</span>'}</td>
             <td><button class="nc-table-log nc-table-txn" data-prop-idx="${i}" title="Transaction Log">Txn</button></td>
             <td><button class="nc-table-log" data-prop-idx="${i}" title="Surveyor's Log">Log</button></td>
-            <td>${(prop.type === 'Commercial' || prop.type === 'Mixed Use') ? `<button class="nc-table-log nc-table-fine" data-prop-idx="${i}" title="Fine Log">Fine</button>` : ''}</td>
+            <td><button class="nc-table-log nc-table-fine" data-prop-idx="${i}" title="Fine Log">Fine</button></td>
             <td>${(() => { const c = ncGetCompliance(prop); return c ? (c.compliant ? '<span title="Compliant" style="color:#4caf50;">\u2705</span>' : '<span title="Non-Compliant (' + c.passed + '/' + c.total + ')" style="color:#e04040;">\u274C</span>') : '<span style="color:var(--text-muted);">—</span>'; })()}</td>
         `;
 
@@ -1934,14 +1984,11 @@ function renderNCTable(properties, filter = '') {
             ncShowSurveyorLog(prop);
         });
 
-        // Fine Log button (commercial / mixed use only)
-        const fineBtn = tr.querySelector('.nc-table-fine');
-        if (fineBtn) {
-            fineBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                ncShowFineLog(prop);
-            });
-        }
+        // Fine Log button
+        tr.querySelector('.nc-table-fine').addEventListener('click', (e) => {
+            e.stopPropagation();
+            ncShowFineLog(prop);
+        });
 
         // Click-to-expand for truncated text cells (owner, name, address)
         ['owner', 'name', 'address', 'tenant', 'discord_contact'].forEach(field => {
@@ -2555,12 +2602,25 @@ document.getElementById('ncLogNoteSaveBtn').addEventListener('click', async () =
     btn.textContent = 'Add Note';
 });
 
-// Close log modal
+// Re-open a property's map popup by reference
+function ncReopenPopup(prop) {
+    if (!prop) return;
+    const pi = ncProperties.indexOf(prop);
+    if (pi >= 0 && ncMarkers[pi]) {
+        ncMarkers[pi].openPopup();
+    }
+}
+
+// Close log modal → return to popup
 document.getElementById('ncLogClose').addEventListener('click', () => {
     document.getElementById('ncLogModal').classList.remove('open');
+    ncReopenPopup(ncLogCurrentProp);
 });
 document.getElementById('ncLogModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+    if (e.target === e.currentTarget) {
+        e.currentTarget.classList.remove('open');
+        ncReopenPopup(ncLogCurrentProp);
+    }
 });
 
 // ============================================
@@ -2715,7 +2775,7 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         const updates = { appraised_value: amount, owner: buyer, updated_at: new Date().toISOString() };
         if (rename) updates.name = rename;
         // Initialize trust deposit for new owner of commercial/mixed-use properties (60d deposit - 10d fee = 50d)
-        if (prop.type === 'Commercial' || prop.type === 'Mixed Use') {
+        if (prop.type === 'Commercial') {
             updates.trust_deposit = 50;
         }
 
@@ -2728,7 +2788,7 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         if (prop.owner !== buyer) changes.push({ field: 'owner', oldVal: prop.owner, newVal: buyer });
         if (prop.appraised_value !== amount) changes.push({ field: 'appraised_value', oldVal: prop.appraised_value, newVal: amount });
         if (rename && rename !== prop.name) changes.push({ field: 'name', oldVal: prop.name, newVal: rename });
-        if ((prop.type === 'Commercial' || prop.type === 'Mixed Use') && prop.trust_deposit !== 50) {
+        if ((prop.type === 'Commercial') && prop.trust_deposit !== 50) {
             changes.push({ field: 'trust_deposit', oldVal: prop.trust_deposit, newVal: 50 });
         }
         if (changes.length > 0) ncLogMultipleChanges(prop.id, changes);
@@ -2737,7 +2797,7 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         prop.owner = buyer;
         prop.appraised_value = amount;
         if (rename) prop.name = rename;
-        if (prop.type === 'Commercial' || prop.type === 'Mixed Use') prop.trust_deposit = 50;
+        if (prop.type === 'Commercial') prop.trust_deposit = 50;
 
         // Refresh UI
         renderNCMarkers(ncProperties);
@@ -2757,9 +2817,13 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
 // Close transaction modal
 document.getElementById('ncTxnClose').addEventListener('click', () => {
     document.getElementById('ncTxnModal').classList.remove('open');
+    ncReopenPopup(ncTxnCurrentProp);
 });
 document.getElementById('ncTxnModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+    if (e.target === e.currentTarget) {
+        e.currentTarget.classList.remove('open');
+        ncReopenPopup(ncTxnCurrentProp);
+    }
 });
 
 // ============================================
@@ -2911,15 +2975,17 @@ document.getElementById('ncFineSaveBtn').addEventListener('click', async () => {
             ncEditingFineId = null;
         } else {
             await supabaseInsert('nc_fines', fineData);
-            // Deduct from trust_deposit
-            const oldTrust = prop.trust_deposit || 0;
-            const newTrust = Math.max(0, oldTrust - amount);
-            await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                method: 'PATCH', headers: restHeaders(),
-                body: JSON.stringify({ trust_deposit: newTrust, updated_at: new Date().toISOString() })
-            });
-            ncLogChange(prop.id, 'trust_deposit', oldTrust, newTrust);
-            prop.trust_deposit = newTrust;
+            // Deduct from trust_deposit (skip if waived)
+            const oldTrust = prop.trust_deposit ?? 0;
+            if (oldTrust !== -1) {
+                const newTrust = Math.max(0, oldTrust - amount);
+                await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                    method: 'PATCH', headers: restHeaders(),
+                    body: JSON.stringify({ trust_deposit: newTrust, updated_at: new Date().toISOString() })
+                });
+                ncLogChange(prop.id, 'trust_deposit', oldTrust, newTrust);
+                prop.trust_deposit = newTrust;
+            }
             renderNCMarkers(ncProperties);
             renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
         }
@@ -2934,21 +3000,24 @@ document.getElementById('ncFineSaveBtn').addEventListener('click', async () => {
 // Close Fine modal
 document.getElementById('ncFineClose').addEventListener('click', () => {
     document.getElementById('ncFineModal').classList.remove('open');
+    ncReopenPopup(ncFineCurrentProp);
 });
 document.getElementById('ncFineModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+    if (e.target === e.currentTarget) {
+        e.currentTarget.classList.remove('open');
+        ncReopenPopup(ncFineCurrentProp);
+    }
 });
 
 // ============================================
 // Compliance check for commercial properties
 // ============================================
 function ncGetCompliance(prop) {
-    if (prop.type !== 'Commercial' && prop.type !== 'Mixed Use') return null;
+    if (prop.type !== 'Commercial') return null;
     const checks = {
         owner: !!(prop.owner && prop.owner.trim()),
         shopchests: !!prop.shopchests,
         signage: !!prop.signage,
-        hs_account: !!(prop.hs_account && prop.hs_account.trim()),
         discord_contact: !!(prop.discord_contact && prop.discord_contact.trim())
     };
     const passed = Object.values(checks).filter(Boolean).length;
@@ -3151,6 +3220,8 @@ document.getElementById('ncTableClose').addEventListener('click', () => {
             ncEditMode = false;
             ncHasUnsaved = false;
             ncSelectedRow = null;
+            ncTableFilterType = null;
+            ncTableFilterStatus = null;
             ncUpdateToolbar();
             document.getElementById('ncTableOverlay').classList.remove('open');
         };
@@ -3161,6 +3232,8 @@ document.getElementById('ncTableClose').addEventListener('click', () => {
             ncSelectedRow = null;
             ncUpdateToolbar();
         }
+        ncTableFilterType = null;
+        ncTableFilterStatus = null;
         document.getElementById('ncTableOverlay').classList.remove('open');
     }
 });
