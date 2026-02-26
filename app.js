@@ -1002,8 +1002,13 @@ async function loadNewCallisto() {
         if (wrap) setTimeout(() => wrap.scrollTop = wrap.scrollHeight, 50);
     });
 
-    // Lower bottom controls when popup is open so popup renders on top, and center map on property
+    // Unified popup handler — all popup setup in one listener
     ncMap.on('popupopen', (e) => {
+        const container = e.popup.getElement();
+        if (!container) return;
+        const canEdit = ncCanEdit();
+
+        // --- Layout: center map on property, lower bottom controls ---
         document.getElementById('newCallistoView').classList.add('popup-open');
         const latlng = e.popup.getLatLng();
         if (latlng) {
@@ -1011,21 +1016,29 @@ async function loadNewCallisto() {
             const px = ncMap.project(latlng, zoom);
             const mapH = ncMap.getSize().y;
             const panelH = document.getElementById('ncPanel')?.offsetHeight || 120;
-            px.y -= (mapH / 2 - panelH - 80); // place popup well above carousel
+            px.y -= (mapH / 2 - panelH - 80);
             ncMap.panTo(ncMap.unproject(px, zoom));
         }
-    });
-    ncMap.on('popupclose', () => document.getElementById('newCallistoView').classList.remove('popup-open'));
 
-    // Click-to-copy coords handler
-    ncMap.on('popupopen', (e) => {
-        const el = e.popup.getElement();
-        if (!el) return;
-        const coordsEl = el.querySelector('.nc-coords-copy');
+        // --- Portrait image detection ---
+        const img = container.querySelector('.nc-popup-img-wrap img');
+        if (img) {
+            const popup = container.querySelector('.nc-popup');
+            const applyPortrait = () => {
+                if (img.naturalHeight > img.naturalWidth) {
+                    popup.classList.add('nc-popup-portrait');
+                    e.popup.update();
+                }
+            };
+            if (img.complete) applyPortrait();
+            else img.addEventListener('load', applyPortrait);
+        }
+
+        // --- Click-to-copy: coords, name, owner, discord ---
+        const coordsEl = container.querySelector('.nc-coords-copy');
         if (coordsEl) {
             coordsEl.addEventListener('click', () => {
-                const coords = coordsEl.dataset.coords;
-                navigator.clipboard.writeText(coords).then(() => {
+                navigator.clipboard.writeText(coordsEl.dataset.coords).then(() => {
                     const tip = document.createElement('div');
                     tip.className = 'nc-copy-toast';
                     tip.textContent = 'Cords Copied to Clipboard';
@@ -1035,8 +1048,7 @@ async function loadNewCallisto() {
                 });
             });
         }
-        // Click-to-copy for name, owner, discord
-        el.querySelectorAll('.nc-popup-copyable').forEach(cel => {
+        container.querySelectorAll('.nc-popup-copyable').forEach(cel => {
             cel.style.cursor = 'pointer';
             cel.addEventListener('click', () => {
                 navigator.clipboard.writeText(cel.dataset.copy).then(() => {
@@ -1049,264 +1061,10 @@ async function loadNewCallisto() {
                 });
             });
         });
-    });
 
-    // Detect portrait images and switch to side layout
-    ncMap.on('popupopen', (e) => {
-        const el = e.popup.getElement();
-        if (!el) return;
-        const img = el.querySelector('.nc-popup-img-wrap img');
-        if (!img) return;
-        const popup = el.querySelector('.nc-popup');
-        const applyPortrait = () => {
-            if (img.naturalHeight > img.naturalWidth) {
-                popup.classList.add('nc-popup-portrait');
-                e.popup.update(); // re-position after layout change
-            }
-        };
-        if (img.complete) applyPortrait();
-        else img.addEventListener('load', applyPortrait);
-    });
-
-    // Popup image upload/remove handlers
-    ncMap.on('popupopen', (e) => {
-        if (!ncCanEdit()) return;
-        const container = e.popup.getElement();
-        if (!container) return;
-
-        // Helper: upload and save image for property in popup
-        async function popupUploadImage(file, prop, pi, statusEl) {
-            if (statusEl) statusEl.textContent = 'Uploading...';
-            try {
-                const ext = file.name ? file.name.split('.').pop() : (file.type === 'image/png' ? 'png' : 'jpg');
-                const fname = `prop_${prop.id || pi}_${Date.now()}.${ext}`;
-                const uploadResp = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/nc-images/${fname}`, {
-                    method: 'POST',
-                    headers: {
-                        'apikey': CONFIG.supabaseKey,
-                        'Authorization': `Bearer ${currentAccessToken || CONFIG.supabaseKey}`,
-                        'Content-Type': file.type
-                    },
-                    body: file
-                });
-                if (!uploadResp.ok) throw new Error(await uploadResp.text());
-                prop.image_url = `${CONFIG.supabaseUrl}/storage/v1/object/public/nc-images/${fname}`;
-                if (prop.id) {
-                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                        method: 'PATCH', headers: restHeaders(),
-                        body: JSON.stringify({ image_url: prop.image_url, updated_at: new Date().toISOString() })
-                    });
-                }
-                ncMap.closePopup();
-                renderNCMarkers(ncProperties);
-                renderNCPanel(ncProperties);
-            } catch (err) {
-                console.error('Popup image upload failed:', err);
-                if (statusEl) statusEl.textContent = 'Upload failed!';
-            }
-        }
-
-        // Add-image zone (no image yet) — click to browse, paste to upload
-        const zone = container.querySelector('.nc-popup-img-zone');
-        if (zone) {
-            const pi = parseInt(zone.dataset.pi);
-            const prop = ncProperties[pi];
-            const statusEl = zone.querySelector('.nc-popup-img-status');
-            zone.addEventListener('click', () => {
-                const fileInput = document.createElement('input');
-                fileInput.type = 'file';
-                fileInput.accept = 'image/*';
-                fileInput.addEventListener('change', async () => {
-                    if (fileInput.files[0]) await popupUploadImage(fileInput.files[0], prop, pi, statusEl);
-                });
-                fileInput.click();
-            });
-            zone.tabIndex = 0;
-            zone.addEventListener('paste', async (ev) => {
-                ev.preventDefault();
-                const items = ev.clipboardData?.items;
-                if (!items) return;
-                for (const item of items) {
-                    if (item.type.startsWith('image/')) {
-                        const file = item.getAsFile();
-                        if (file) { await popupUploadImage(file, prop, pi, statusEl); return; }
-                    }
-                }
-                if (statusEl) statusEl.textContent = 'No image in clipboard';
-            });
-        }
-
-        // Change-image button (has image) — click to browse new one
-        const changeBtn = container.querySelector('.nc-popup-img-change');
-        if (changeBtn) {
-            const popupEl = container.querySelector('.nc-popup');
-            const pi = popupEl ? parseInt(popupEl.dataset.pi) : null;
-            if (pi != null) {
-                const prop = ncProperties[pi];
-                changeBtn.addEventListener('click', (ev) => {
-                    ev.stopPropagation();
-                    const fileInput = document.createElement('input');
-                    fileInput.type = 'file';
-                    fileInput.accept = 'image/*';
-                    fileInput.addEventListener('change', async () => {
-                        if (fileInput.files[0]) await popupUploadImage(fileInput.files[0], prop, pi, null);
-                    });
-                    fileInput.click();
-                });
-            }
-        }
-
-        // Remove-image button
-        const removeBtn = container.querySelector('.nc-popup-img-remove');
-        if (removeBtn) {
-            const popupEl = container.querySelector('.nc-popup');
-            const pi = popupEl ? parseInt(popupEl.dataset.pi) : null;
-            if (pi != null) {
-                const prop = ncProperties[pi];
-                removeBtn.addEventListener('click', async (ev) => {
-                    ev.stopPropagation();
-                    if (!confirm('Remove this image?')) return;
-                    prop.image_url = null;
-                    if (prop.id) {
-                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                            method: 'PATCH', headers: restHeaders(),
-                            body: JSON.stringify({ image_url: null, updated_at: new Date().toISOString() })
-                        });
-                    }
-                    ncMap.closePopup();
-                    renderNCMarkers(ncProperties);
-                    renderNCPanel(ncProperties);
-                });
-            }
-        }
-
-        // Status dropdown
-        const statusDD = container.querySelector('.nc-popup-status-dd');
-        if (statusDD) {
-            const pi = parseInt(statusDD.dataset.pi);
-            const prop = ncProperties[pi];
-            const statusColors = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
-            statusDD.addEventListener('change', async () => {
-                const oldStatus = prop.status || 'Good Standing';
-                const newStatus = statusDD.value;
-                if (oldStatus === newStatus) return;
-                prop.status = newStatus;
-                statusDD.style.background = statusColors[newStatus] || '#888';
-                if (prop.id) {
-                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                        method: 'PATCH', headers: restHeaders(),
-                        body: JSON.stringify({ status: newStatus, updated_at: new Date().toISOString() })
-                    });
-                    ncLogChange(prop.id, 'status', oldStatus, newStatus);
-                }
-            });
-        }
-
-        // Type dropdown
-        const typeDD = container.querySelector('.nc-popup-type-dd');
-        if (typeDD) {
-            const pi = parseInt(typeDD.dataset.pi);
-            const prop = ncProperties[pi];
-            typeDD.addEventListener('change', async () => {
-                const oldType = prop.type || 'Residential';
-                const newType = typeDD.value;
-                if (oldType === newType) return;
-                prop.type = newType;
-                typeDD.style.background = NC_TYPE_COLORS[newType] || '#888';
-                // Live-update marker color + compliance border
-                if (ncMarkers[pi]) {
-                    const compliance = ncGetCompliance(prop);
-                    ncMarkers[pi].setStyle({
-                        fillColor: NC_TYPE_COLORS[newType] || prop.color || '#888',
-                        color: (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
-                        weight: (compliance && !compliance.compliant) ? 2 : 1
-                    });
-                }
-                renderNCPanel(ncProperties);
-                if (prop.id) {
-                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                        method: 'PATCH', headers: restHeaders(),
-                        body: JSON.stringify({ type: newType, updated_at: new Date().toISOString() })
-                    });
-                    ncLogChange(prop.id, 'type', oldType, newType);
-                }
-            });
-        }
-
-        // Inline-editable fields (name, address)
-        const pendingEdits = []; // track active inputs for save-on-close
-        container.querySelectorAll('.nc-popup-editable').forEach(el => {
-            el.addEventListener('click', () => {
-                if (el.querySelector('input')) return; // already editing
-                const field = el.dataset.field;
-                const pi = parseInt(el.dataset.pi);
-                const prop = ncProperties[pi];
-                const oldVal = prop[field] || '';
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'nc-popup-inline-input';
-                input.value = oldVal;
-                el.textContent = '';
-                el.appendChild(input);
-                L.DomEvent.disableClickPropagation(input);
-                L.DomEvent.on(input, 'keydown keypress keyup', L.DomEvent.stopPropagation);
-                input.focus();
-                input.select();
-                let saved = false;
-                const save = async () => {
-                    if (saved) return;
-                    saved = true;
-                    input._changed = false;
-                    const rawVal = input.value.trim();
-                    // Parse numeric fields
-                    const newVal = (field === 'trust_deposit' || field === 'appraised_value') ? (rawVal ? Number(rawVal) : null) : rawVal;
-                    if (String(newVal ?? '') === String(oldVal ?? '')) return;
-                    input._changed = true;
-                    prop[field] = newVal;
-                    if (prop.id) {
-                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                            method: 'PATCH', headers: restHeaders(),
-                            body: JSON.stringify({ [field]: newVal, updated_at: new Date().toISOString() })
-                        });
-                        ncLogChange(prop.id, field, oldVal, newVal);
-                    }
-                    // Update marker tooltip if name changed
-                    if (field === 'name' && ncMarkers[pi]) {
-                        ncMarkers[pi].unbindTooltip();
-                        ncMarkers[pi].bindTooltip(newVal || 'Unnamed', {
-                            className: 'nc-tooltip',
-                            direction: 'top',
-                            offset: [0, -8],
-                            permanent: ncLabelsVisible
-                        });
-                    }
-                    renderNCPanel(ncProperties);
-                };
-                pendingEdits.push({ input, save });
-                input.addEventListener('keydown', (ev) => {
-                    if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
-                    if (ev.key === 'Escape') { input.value = oldVal; input.blur(); }
-                });
-            });
-        });
-        // Save all pending edits when popup closes, then re-render markers
-        ncMap.once('popupclose', async () => {
-            await Promise.all(pendingEdits.map(({ save }) => save()));
-            if (pendingEdits.some(({ input }) => input._changed)) {
-                renderNCMarkers(ncProperties);
-            }
-        });
-
-    });
-
-    // Log buttons + toggles — available to all users, not just admins
-    ncMap.on('popupopen', (e) => {
-        const container = e.popup.getElement();
-        if (!container) return;
-
-        // Signage / Shopchests toggle in popup (admin/surveyor can toggle + save)
+        // --- Signage / Shopchests toggle (admin/surveyor) ---
         container.querySelectorAll('.nc-popup-toggle').forEach(el => {
-            if (ncCanEdit()) {
+            if (canEdit) {
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', async () => {
                     const pi = parseInt(el.dataset.pi);
@@ -1316,9 +1074,11 @@ async function loadNewCallisto() {
                     prop[field] = !prop[field];
                     el.textContent = prop[field] ? '\u2705' : '\u274C';
                     if (prop.id) {
+                        const now = new Date().toISOString();
+                        prop.last_surveyed = now;
                         await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
                             method: 'PATCH', headers: restHeaders(),
-                            body: JSON.stringify({ [field]: prop[field], updated_at: new Date().toISOString() })
+                            body: JSON.stringify({ [field]: prop[field], last_surveyed: now, updated_at: now })
                         });
                         ncLogChange(prop.id, field, String(oldVal), String(prop[field]));
                     }
@@ -1326,36 +1086,244 @@ async function loadNewCallisto() {
             }
         });
 
-        // Transaction Log button
+        // --- Log buttons (all users) ---
         const txnBtn = container.querySelector('.nc-popup-txn-btn');
         if (txnBtn) {
             const pi = parseInt(txnBtn.dataset.pi);
-            txnBtn.addEventListener('click', () => {
-                ncMap.closePopup();
-                ncShowTransactionLog(ncProperties[pi]);
-            });
+            txnBtn.addEventListener('click', () => { ncMap.closePopup(); ncShowTransactionLog(ncProperties[pi]); });
         }
-
-        // Surveyor's Log button
         const logBtn = container.querySelector('.nc-popup-log-btn');
         if (logBtn) {
             const pi = parseInt(logBtn.dataset.pi);
-            logBtn.addEventListener('click', () => {
-                ncMap.closePopup();
-                ncShowSurveyorLog(ncProperties[pi]);
-            });
+            logBtn.addEventListener('click', () => { ncMap.closePopup(); ncShowSurveyorLog(ncProperties[pi]); });
         }
-
-        // Fine Log button
         const fineBtn = container.querySelector('.nc-popup-fine-btn');
         if (fineBtn) {
             const pi = parseInt(fineBtn.dataset.pi);
-            fineBtn.addEventListener('click', () => {
-                ncMap.closePopup();
-                ncShowFineLog(ncProperties[pi]);
+            fineBtn.addEventListener('click', () => { ncMap.closePopup(); ncShowFineLog(ncProperties[pi]); });
+        }
+
+        // --- Admin/surveyor only: image upload, dropdowns, inline editing ---
+        if (canEdit) {
+            // Helper: upload and save image for property in popup
+            async function popupUploadImage(file, prop, pi, statusEl) {
+                if (statusEl) statusEl.textContent = 'Uploading...';
+                try {
+                    const ext = file.name ? file.name.split('.').pop() : (file.type === 'image/png' ? 'png' : 'jpg');
+                    const fname = `prop_${prop.id || pi}_${Date.now()}.${ext}`;
+                    const uploadResp = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/nc-images/${fname}`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': CONFIG.supabaseKey,
+                            'Authorization': `Bearer ${currentAccessToken || CONFIG.supabaseKey}`,
+                            'Content-Type': file.type
+                        },
+                        body: file
+                    });
+                    if (!uploadResp.ok) throw new Error(await uploadResp.text());
+                    prop.image_url = `${CONFIG.supabaseUrl}/storage/v1/object/public/nc-images/${fname}`;
+                    if (prop.id) {
+                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                            method: 'PATCH', headers: restHeaders(),
+                            body: JSON.stringify({ image_url: prop.image_url, updated_at: new Date().toISOString() })
+                        });
+                    }
+                    ncMap.closePopup();
+                    ncRefreshAll();
+                } catch (err) {
+                    console.error('Popup image upload failed:', err);
+                    if (statusEl) statusEl.textContent = 'Upload failed!';
+                }
+            }
+
+            // Add-image zone (no image yet)
+            const zone = container.querySelector('.nc-popup-img-zone');
+            if (zone) {
+                const pi = parseInt(zone.dataset.pi);
+                const prop = ncProperties[pi];
+                const statusEl = zone.querySelector('.nc-popup-img-status');
+                zone.addEventListener('click', () => {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = 'image/*';
+                    fileInput.addEventListener('change', async () => {
+                        if (fileInput.files[0]) await popupUploadImage(fileInput.files[0], prop, pi, statusEl);
+                    });
+                    fileInput.click();
+                });
+                zone.tabIndex = 0;
+                zone.addEventListener('paste', async (ev) => {
+                    ev.preventDefault();
+                    const items = ev.clipboardData?.items;
+                    if (!items) return;
+                    for (const item of items) {
+                        if (item.type.startsWith('image/')) {
+                            const file = item.getAsFile();
+                            if (file) { await popupUploadImage(file, prop, pi, statusEl); return; }
+                        }
+                    }
+                    if (statusEl) statusEl.textContent = 'No image in clipboard';
+                });
+            }
+
+            // Change-image button
+            const changeBtn = container.querySelector('.nc-popup-img-change');
+            if (changeBtn) {
+                const popupEl = container.querySelector('.nc-popup');
+                const pi = popupEl ? parseInt(popupEl.dataset.pi) : null;
+                if (pi != null) {
+                    const prop = ncProperties[pi];
+                    changeBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        const fileInput = document.createElement('input');
+                        fileInput.type = 'file';
+                        fileInput.accept = 'image/*';
+                        fileInput.addEventListener('change', async () => {
+                            if (fileInput.files[0]) await popupUploadImage(fileInput.files[0], prop, pi, null);
+                        });
+                        fileInput.click();
+                    });
+                }
+            }
+
+            // Remove-image button
+            const removeBtn = container.querySelector('.nc-popup-img-remove');
+            if (removeBtn) {
+                const popupEl = container.querySelector('.nc-popup');
+                const pi = popupEl ? parseInt(popupEl.dataset.pi) : null;
+                if (pi != null) {
+                    const prop = ncProperties[pi];
+                    removeBtn.addEventListener('click', async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm('Remove this image?')) return;
+                        prop.image_url = null;
+                        if (prop.id) {
+                            await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                                method: 'PATCH', headers: restHeaders(),
+                                body: JSON.stringify({ image_url: null, updated_at: new Date().toISOString() })
+                            });
+                        }
+                        ncMap.closePopup();
+                        ncRefreshAll();
+                    });
+                }
+            }
+
+            // Status dropdown
+            const statusDD = container.querySelector('.nc-popup-status-dd');
+            if (statusDD) {
+                const pi = parseInt(statusDD.dataset.pi);
+                const prop = ncProperties[pi];
+                const statusColors = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
+                statusDD.addEventListener('change', async () => {
+                    const oldStatus = prop.status || 'Good Standing';
+                    const newStatus = statusDD.value;
+                    if (oldStatus === newStatus) return;
+                    prop.status = newStatus;
+                    statusDD.style.background = statusColors[newStatus] || '#888';
+                    if (prop.id) {
+                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                            method: 'PATCH', headers: restHeaders(),
+                            body: JSON.stringify({ status: newStatus, updated_at: new Date().toISOString() })
+                        });
+                        ncLogChange(prop.id, 'status', oldStatus, newStatus);
+                    }
+                });
+            }
+
+            // Type dropdown
+            const typeDD = container.querySelector('.nc-popup-type-dd');
+            if (typeDD) {
+                const pi = parseInt(typeDD.dataset.pi);
+                const prop = ncProperties[pi];
+                typeDD.addEventListener('change', async () => {
+                    const oldType = prop.type || 'Residential';
+                    const newType = typeDD.value;
+                    if (oldType === newType) return;
+                    prop.type = newType;
+                    typeDD.style.background = NC_TYPE_COLORS[newType] || '#888';
+                    if (ncMarkers[pi]) {
+                        const compliance = ncGetCompliance(prop);
+                        ncMarkers[pi].setStyle({
+                            fillColor: NC_TYPE_COLORS[newType] || prop.color || '#888',
+                            color: (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
+                            weight: (compliance && !compliance.compliant) ? 2 : 1
+                        });
+                    }
+                    renderNCPanel(ncProperties);
+                    if (prop.id) {
+                        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                            method: 'PATCH', headers: restHeaders(),
+                            body: JSON.stringify({ type: newType, updated_at: new Date().toISOString() })
+                        });
+                        ncLogChange(prop.id, 'type', oldType, newType);
+                    }
+                });
+            }
+
+            // Inline-editable fields (name, address)
+            const pendingEdits = [];
+            container.querySelectorAll('.nc-popup-editable').forEach(el => {
+                el.addEventListener('click', () => {
+                    if (el.querySelector('input')) return;
+                    const field = el.dataset.field;
+                    const pi = parseInt(el.dataset.pi);
+                    const prop = ncProperties[pi];
+                    const oldVal = prop[field] || '';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'nc-popup-inline-input';
+                    input.value = oldVal;
+                    el.textContent = '';
+                    el.appendChild(input);
+                    L.DomEvent.disableClickPropagation(input);
+                    L.DomEvent.on(input, 'keydown keypress keyup', L.DomEvent.stopPropagation);
+                    input.focus();
+                    input.select();
+                    let saved = false;
+                    const save = async () => {
+                        if (saved) return;
+                        saved = true;
+                        input._changed = false;
+                        const rawVal = input.value.trim();
+                        const newVal = (field === 'trust_deposit' || field === 'appraised_value') ? (rawVal ? Number(rawVal) : null) : rawVal;
+                        if (String(newVal ?? '') === String(oldVal ?? '')) return;
+                        input._changed = true;
+                        prop[field] = newVal;
+                        if (prop.id) {
+                            await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                                method: 'PATCH', headers: restHeaders(),
+                                body: JSON.stringify({ [field]: newVal, updated_at: new Date().toISOString() })
+                            });
+                            ncLogChange(prop.id, field, oldVal, newVal);
+                        }
+                        if (field === 'name' && ncMarkers[pi]) {
+                            ncMarkers[pi].unbindTooltip();
+                            ncMarkers[pi].bindTooltip(newVal || 'Unnamed', {
+                                className: 'nc-tooltip',
+                                direction: 'top',
+                                offset: [0, -8],
+                                permanent: ncLabelsVisible
+                            });
+                        }
+                        renderNCPanel(ncProperties);
+                    };
+                    pendingEdits.push({ input, save });
+                    input.addEventListener('keydown', (ev) => {
+                        if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+                        if (ev.key === 'Escape') { input.value = oldVal; input.blur(); }
+                    });
+                });
+            });
+            ncMap.once('popupclose', async () => {
+                await Promise.all(pendingEdits.map(({ save }) => save()));
+                if (pendingEdits.some(({ input }) => input._changed)) {
+                    renderNCMarkers(ncProperties);
+                }
             });
         }
     });
+    ncMap.on('popupclose', () => document.getElementById('newCallistoView').classList.remove('popup-open'));
 
     try {
         // Load from Supabase (source of truth)
@@ -1385,8 +1353,7 @@ async function loadNewCallisto() {
         }
 
         ncProperties = props;
-        renderNCMarkers(ncProperties);
-        renderNCPanel(ncProperties);
+        ncRefreshAll();
         const countEl = document.getElementById('ncPropsCount');
         if (countEl) countEl.textContent = `${ncProperties.length} properties`;
     } catch (err) {
@@ -1396,10 +1363,96 @@ async function loadNewCallisto() {
             const resp = await fetch(NC_PROPERTY_JSON_URL);
             const data = await resp.json();
             ncProperties = data.features || data;
-            renderNCMarkers(ncProperties);
-            renderNCPanel(ncProperties);
+            ncRefreshAll();
         } catch (e) { console.error('GitHub fallback also failed:', e); }
     }
+}
+
+function ncRefreshAll() {
+    renderNCMarkers(ncProperties);
+    renderNCPanel(ncProperties);
+    renderNCTable(ncProperties, document.getElementById('ncTableSearch')?.value || '');
+}
+
+function buildPopupHTML(prop, canEdit, pi) {
+    const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
+    const esc = s => (s || '').replace(/"/g, '&quot;');
+    let h = `<div class="nc-popup" data-pi="${pi}">`;
+
+    // Image
+    if (prop.image_url) {
+        h += `<div class="nc-popup-img-wrap"><img src="${prop.image_url}" alt="">`;
+        if (canEdit) h += `<div class="nc-popup-img-actions"><button class="nc-popup-img-action nc-popup-img-change" title="Change image">&#x270E;</button><button class="nc-popup-img-action nc-popup-img-remove" title="Remove image">&times;</button></div>`;
+        h += `</div>`;
+    } else if (canEdit) {
+        h += `<div class="nc-popup-img-zone" data-pi="${pi}"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><span class="nc-popup-img-hint">Click here &amp; paste (Ctrl+V)</span><div class="nc-popup-img-status"></div></div>`;
+    }
+
+    // Title
+    h += `<div class="nc-popup-body">`;
+    if (canEdit) {
+        h += `<h3 class="nc-popup-editable" data-pi="${pi}" data-field="name" title="Click to edit">${prop.name || 'Unnamed Property'}</h3>`;
+    } else {
+        h += `<h3 class="nc-popup-copyable" data-copy="${esc(prop.name)}" title="Click to copy">${prop.name || 'Unnamed Property'}</h3>`;
+    }
+
+    // Type + Status badges
+    const curType = prop.type || 'Residential';
+    const tc = NC_TYPE_COLORS[curType] || prop.color || '#888';
+    const curStatus = prop.status || 'Good Standing';
+    const sc = curStatus === 'Good Standing' ? '#4caf50' : curStatus === 'Warning' ? '#e6a817' : curStatus === 'Derelict' ? '#e04040' : '#888';
+    h += `<div class="nc-prop-badges">`;
+    if (canEdit) {
+        h += `<select class="nc-popup-type-dd" data-pi="${pi}" style="background:${tc};">`;
+        Object.keys(NC_TYPE_COLORS).forEach(t => { h += `<option value="${t}"${t === curType ? ' selected' : ''}>${t.toUpperCase()}\u00A0\u00A0</option>`; });
+        h += `</select>`;
+        h += `<select class="nc-popup-status-dd" data-pi="${pi}" style="background:${sc};">`;
+        ['Good Standing', 'Warning', 'Derelict'].forEach(s => { h += `<option value="${s}"${s === curStatus ? ' selected' : ''}>${s.toUpperCase()}\u00A0\u00A0\u00A0\u00A0</option>`; });
+        h += `</select>`;
+    } else {
+        h += `<span class="nc-prop-type" style="background: ${tc};">${curType.toUpperCase()}</span>`;
+        h += `<span class="nc-prop-status-badge" style="background: ${sc};">${curStatus.toUpperCase()}</span>`;
+    }
+    h += `</div>`;
+
+    // Details
+    if (canEdit) {
+        h += `<div class="nc-prop-detail"><span>Address</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="address" title="Click to edit">${prop.address || ''}</span></div>`;
+    } else if (prop.address) {
+        h += `<div class="nc-prop-detail"><span>Address</span><span class="value">${prop.address}</span></div>`;
+    }
+    if (prop.owner) h += `<div class="nc-prop-detail"><span>Owner</span><span class="value nc-popup-copyable" data-copy="${esc(prop.owner)}" title="Click to copy">${prop.owner}</span></div>`;
+    if (prop.tenant) h += `<div class="nc-prop-detail"><span>Tenant</span><span class="value">${prop.tenant}</span></div>`;
+    if (prop.discord_contact) h += `<div class="nc-prop-detail"><span>Discord</span><span class="value nc-popup-copyable" data-copy="${esc(prop.discord_contact)}" title="Click to copy">${prop.discord_contact}</span></div>`;
+    h += `<div class="nc-prop-detail"><span>Coords</span><span class="value nc-coords-copy" data-coords="${prop.x}, ${prop.z}" title="Click to copy">${prop.x}, ${prop.z}</span></div>`;
+    if (prop.appraised_value) h += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
+
+    // Signage, Shopchests (commercial only)
+    if (prop.type === 'Commercial') {
+        h += `<div class="nc-prop-detail"><span>Signage</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="signage">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
+        h += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="shopchests">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
+    }
+
+    // Compliance
+    const comp = ncGetCompliance(prop);
+    if (comp) {
+        const badge = comp.compliant
+            ? '<span style="background:rgba(76,175,80,0.25);color:#4caf50;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Compliant</span>'
+            : '<span style="background:rgba(224,64,64,0.25);color:#e04040;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Non-Compliant</span>';
+        h += `<div class="nc-prop-detail"><span>Compliance</span><span class="value">${badge}</span></div>`;
+    }
+
+    if (prop.last_surveyed) h += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
+    if (prop.sale_link) h += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
+
+    // Actions
+    h += `<div class="nc-popup-actions">`;
+    h += `<button class="nc-popup-edit-btn" onclick="ncEditPropertyInTable(${pi})">Edit in Table</button>`;
+    h += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
+    h += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
+    h += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
+    h += `</div></div></div>`;
+    return h;
 }
 
 function renderNCMarkers(properties) {
@@ -1428,95 +1481,7 @@ function renderNCMarkers(properties) {
             permanent: ncLabelsVisible
         });
 
-        let popupHTML = `<div class="nc-popup" data-pi="${pi}">`;
-        const canEdit = ncCanEdit();
-        if (prop.image_url) {
-            popupHTML += `<div class="nc-popup-img-wrap">`;
-            popupHTML += `<img src="${prop.image_url}" alt="">`;
-            if (canEdit) {
-                popupHTML += `<div class="nc-popup-img-actions">`;
-                popupHTML += `<button class="nc-popup-img-action nc-popup-img-change" title="Change image">&#x270E;</button>`;
-                popupHTML += `<button class="nc-popup-img-action nc-popup-img-remove" title="Remove image">&times;</button>`;
-                popupHTML += `</div>`;
-            }
-            popupHTML += `</div>`;
-        } else if (canEdit) {
-            popupHTML += `<div class="nc-popup-img-zone" data-pi="${pi}">`;
-            popupHTML += `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>`;
-            popupHTML += `<span class="nc-popup-img-hint">Click here &amp; paste (Ctrl+V)</span>`;
-            popupHTML += `<div class="nc-popup-img-status"></div>`;
-            popupHTML += `</div>`;
-        }
-        popupHTML += `<div class="nc-popup-body">`;
-        if (canEdit) {
-            popupHTML += `<h3 class="nc-popup-editable" data-pi="${pi}" data-field="name" title="Click to edit">${prop.name || 'Unnamed Property'}</h3>`;
-        } else {
-            popupHTML += `<h3 class="nc-popup-copyable" data-copy="${(prop.name || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.name || 'Unnamed Property'}</h3>`;
-        }
-        {
-            const curType = prop.type || 'Residential';
-            const tc = NC_TYPE_COLORS[curType] || prop.color || '#888';
-            const curStatus = prop.status || 'Good Standing';
-            const sc = curStatus === 'Good Standing' ? '#4caf50' : curStatus === 'Warning' ? '#e6a817' : curStatus === 'Derelict' ? '#e04040' : '#888';
-            popupHTML += `<div class="nc-prop-badges">`;
-            if (canEdit) {
-                popupHTML += `<select class="nc-popup-type-dd" data-pi="${pi}" style="background:${tc};">`;
-                Object.keys(NC_TYPE_COLORS).forEach(t => { popupHTML += `<option value="${t}"${t === curType ? ' selected' : ''}>${t.toUpperCase()}\u00A0\u00A0</option>`; });
-                popupHTML += `</select>`;
-                popupHTML += `<select class="nc-popup-status-dd" data-pi="${pi}" style="background:${sc};">`;
-                ['Good Standing', 'Warning', 'Derelict'].forEach(s => { popupHTML += `<option value="${s}"${s === curStatus ? ' selected' : ''}>${s.toUpperCase()}\u00A0\u00A0\u00A0\u00A0</option>`; });
-                popupHTML += `</select>`;
-            } else {
-                popupHTML += `<span class="nc-prop-type" style="background: ${tc};">${curType.toUpperCase()}</span>`;
-                popupHTML += `<span class="nc-prop-status-badge" style="background: ${sc};">${curStatus.toUpperCase()}</span>`;
-            }
-            popupHTML += `</div>`;
-        }
-        const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
-        if (canEdit) {
-            popupHTML += `<div class="nc-prop-detail"><span>Address</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="address" title="Click to edit">${prop.address || ''}</span></div>`;
-        } else if (prop.address) {
-            popupHTML += `<div class="nc-prop-detail"><span>Address</span><span class="value">${prop.address}</span></div>`;
-        }
-        if (prop.owner) popupHTML += `<div class="nc-prop-detail"><span>Owner</span><span class="value nc-popup-copyable" data-copy="${(prop.owner || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.owner}</span></div>`;
-        if (prop.tenant) popupHTML += `<div class="nc-prop-detail"><span>Tenant</span><span class="value">${prop.tenant}</span></div>`;
-        if (prop.discord_contact) popupHTML += `<div class="nc-prop-detail"><span>Discord</span><span class="value nc-popup-copyable" data-copy="${(prop.discord_contact || '').replace(/"/g, '&quot;')}" title="Click to copy">${prop.discord_contact}</span></div>`;
-        popupHTML += `<div class="nc-prop-detail"><span>Coords</span><span class="value nc-coords-copy" data-coords="${prop.x}, ${prop.z}" title="Click to copy">${prop.x}, ${prop.z}</span></div>`;
-        if (prop.appraised_value) popupHTML += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
-        // Signage, Shopchests (commercial only — always toggleable for admins/surveyors)
-        if (prop.type === 'Commercial') {
-            popupHTML += `<div class="nc-prop-detail"><span>Signage</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="signage">${prop.signage ? '\u2705' : '\u274C'}</span></div>`;
-            popupHTML += `<div class="nc-prop-detail"><span>Shopchests</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="shopchests">${prop.shopchests ? '\u2705' : '\u274C'}</span></div>`;
-        }
-        // Compliance indicator (commercial / mixed use only)
-        {
-            const comp = ncGetCompliance(prop);
-            if (comp) {
-                const badge = comp.compliant
-                    ? '<span style="background:rgba(76,175,80,0.25);color:#4caf50;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Compliant</span>'
-                    : '<span style="background:rgba(224,64,64,0.25);color:#e04040;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">Non-Compliant</span>';
-                const checkLabels = { owner: 'Owner', shopchests: 'Shop Chests', signage: 'Signage', discord_contact: 'Discord' };
-                let detail = '';
-                for (const [key, ok] of Object.entries(comp.checks)) {
-                    detail += `<span style="font-size:0.68rem;color:${ok ? '#4caf50' : '#e04040'};margin-right:0.4rem;">${ok ? '\u2705' : '\u274C'} ${checkLabels[key]}</span>`;
-                }
-                popupHTML += `<div class="nc-prop-detail"><span>Compliance</span><span class="value">${badge}</span></div>`;
-                popupHTML += `<div style="margin-top:0.15rem;display:flex;flex-wrap:wrap;gap:0.1rem 0.15rem;">${detail}</div>`;
-            }
-        }
-        if (prop.last_surveyed) popupHTML += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
-        if (prop.sale_link) popupHTML += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
-
-        popupHTML += `<div class="nc-popup-actions">`;
-        popupHTML += `<button class="nc-popup-edit-btn" onclick="ncEditPropertyInTable(${pi})">Edit in Table</button>`;
-        popupHTML += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
-        popupHTML += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
-        popupHTML += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
-        popupHTML += `</div>`;
-        popupHTML += `</div>`; // end nc-popup-body
-        popupHTML += `</div>`;
-
-        marker.bindPopup(popupHTML, { maxWidth: 580, minWidth: 440, autoPan: false, className: 'nc-leaflet-popup' });
+        marker.bindPopup(buildPopupHTML(prop, ncCanEdit(), pi), { maxWidth: 580, minWidth: 440, autoPan: false, className: 'nc-leaflet-popup' });
         marker._ncData = prop;
         marker._ncIndex = pi;
         ncMarkers.push(marker);
@@ -2800,9 +2765,7 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         if (prop.type === 'Commercial') prop.trust_deposit = 50;
 
         // Refresh UI
-        renderNCMarkers(ncProperties);
-        renderNCPanel(ncProperties);
-        renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+        ncRefreshAll();
 
         // Reload the transaction list
         await ncShowTransactionLog(prop);
@@ -2986,8 +2949,7 @@ document.getElementById('ncFineSaveBtn').addEventListener('click', async () => {
                 ncLogChange(prop.id, 'trust_deposit', oldTrust, newTrust);
                 prop.trust_deposit = newTrust;
             }
-            renderNCMarkers(ncProperties);
-            renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+            ncRefreshAll();
         }
         await ncShowFineLog(prop);
     } catch (e) {
@@ -3147,8 +3109,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
             ncEditMode = false;
             ncSelectedRow = null;
             // Refresh markers and panel with saved data
-            renderNCMarkers(ncProperties);
-            renderNCPanel(ncProperties);
+            ncRefreshAll();
         } catch (err) {
             console.error('Save failed:', err);
             alert('Save failed: ' + err.message);
