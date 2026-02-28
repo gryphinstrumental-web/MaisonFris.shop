@@ -1640,6 +1640,7 @@ document.getElementById('ncPanelRight').addEventListener('click', () => ncCycleP
 let ncFilterType = null;   // active type filter
 let ncFilterStatus = null; // active status filter
 let ncFilterUnoccupied = false; // show only unoccupied
+let ncFilterNonCompliant = false; // show only non-compliant commercial
 
 function filterNCMarkers(query) {
     const q = query.toLowerCase().trim();
@@ -1662,6 +1663,11 @@ function filterNCMarkers(query) {
             ncMap.removeLayer(marker);
             return;
         }
+        // Check non-compliant filter
+        if (ncFilterNonCompliant) {
+            const comp = ncGetCompliance(p);
+            if (!comp || comp.compliant) { ncMap.removeLayer(marker); return; }
+        }
         // Check text search
         const s = [p.name, p.owner, p.type, p.address, p.status].filter(Boolean).join(' ').toLowerCase();
         const match = !q || s.includes(q);
@@ -1680,26 +1686,32 @@ function filterNCMarkers(query) {
     });
     const countEl = document.getElementById('ncPropsCount');
     const total = ncMarkers.length;
-    if (countEl) countEl.textContent = (q || ncFilterType || ncFilterStatus || ncFilterUnoccupied) ? `${visible} of ${total} properties` : `${total} properties`;
+    if (countEl) countEl.textContent = (q || ncFilterType || ncFilterStatus || ncFilterUnoccupied || ncFilterNonCompliant) ? `${visible} of ${total} properties` : `${total} properties`;
 }
 
 function ncClearAllFilters() {
     ncFilterType = null;
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
+    ncFilterNonCompliant = false;
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     document.getElementById('ncSearchInput').value = '';
     const uf = document.getElementById('ncUnoccupiedFilter');
     if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+    const cf = document.getElementById('ncComplianceFilter');
+    if (cf) cf.classList.remove('active');
 }
 
 document.getElementById('ncSearchInput').addEventListener('input', (e) => {
     ncFilterType = null;
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
+    ncFilterNonCompliant = false;
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf = document.getElementById('ncUnoccupiedFilter');
     if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+    const cf = document.getElementById('ncComplianceFilter');
+    if (cf) cf.classList.remove('active');
     filterNCMarkers(e.target.value);
 });
 
@@ -1708,12 +1720,15 @@ document.querySelectorAll('.nc-legend-item[data-type]').forEach(item => {
     item.addEventListener('click', () => {
         const type = item.dataset.type;
         document.getElementById('ncSearchInput').value = '';
-        // Clear status + unoccupied filters
+        // Clear status + unoccupied + compliance filters
         ncFilterStatus = null;
         ncFilterUnoccupied = false;
+        ncFilterNonCompliant = false;
         document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
         const uf = document.getElementById('ncUnoccupiedFilter');
         if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+        const cf = document.getElementById('ncComplianceFilter');
+        if (cf) cf.classList.remove('active');
         if (ncFilterType === type) {
             ncFilterType = null;
             item.classList.remove('active');
@@ -1730,11 +1745,14 @@ document.querySelectorAll('.nc-legend-item[data-type]').forEach(item => {
 document.getElementById('ncUnoccupiedFilter').addEventListener('click', () => {
     const el = document.getElementById('ncUnoccupiedFilter');
     document.getElementById('ncSearchInput').value = '';
-    // Clear type and status filters
+    // Clear type, status, and compliance filters
     ncFilterType = null;
     ncFilterStatus = null;
+    ncFilterNonCompliant = false;
     document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(e => e.classList.remove('active'));
+    const cf = document.getElementById('ncComplianceFilter');
+    if (cf) cf.classList.remove('active');
     ncFilterUnoccupied = !ncFilterUnoccupied;
     el.classList.toggle('active', ncFilterUnoccupied);
     el.textContent = ncFilterUnoccupied ? 'Show Occupied' : 'Hide Occupied';
@@ -1746,12 +1764,15 @@ document.querySelectorAll('.nc-legend-item[data-status]').forEach(item => {
     item.addEventListener('click', () => {
         const status = item.dataset.status;
         document.getElementById('ncSearchInput').value = '';
-        // Clear type + unoccupied filters
+        // Clear type + unoccupied + compliance filters
         ncFilterType = null;
         ncFilterUnoccupied = false;
+        ncFilterNonCompliant = false;
         document.querySelectorAll('#ncLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
         const uf = document.getElementById('ncUnoccupiedFilter');
         if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+        const cf2 = document.getElementById('ncComplianceFilter');
+        if (cf2) cf2.classList.remove('active');
         if (ncFilterStatus === status) {
             ncFilterStatus = null;
             item.classList.remove('active');
@@ -1764,11 +1785,29 @@ document.querySelectorAll('.nc-legend-item[data-status]').forEach(item => {
     });
 });
 
+// Non-compliant filter
+document.getElementById('ncComplianceFilter').addEventListener('click', () => {
+    const el = document.getElementById('ncComplianceFilter');
+    document.getElementById('ncSearchInput').value = '';
+    // Clear type, status, and unoccupied filters
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(e => e.classList.remove('active'));
+    document.querySelectorAll('#ncStatusLegend .nc-legend-item[data-status].active').forEach(e => e.classList.remove('active'));
+    const uf = document.getElementById('ncUnoccupiedFilter');
+    if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+    ncFilterNonCompliant = !ncFilterNonCompliant;
+    el.classList.toggle('active', ncFilterNonCompliant);
+    filterNCMarkers('');
+});
+
 // Show All buttons
 document.getElementById('ncTypeShowAll').addEventListener('click', () => {
     ncFilterType = null;
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
+    ncFilterNonCompliant = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf1 = document.getElementById('ncUnoccupiedFilter');
@@ -1779,6 +1818,7 @@ document.getElementById('ncStatusShowAll').addEventListener('click', () => {
     ncFilterType = null;
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
+    ncFilterNonCompliant = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf2 = document.getElementById('ncUnoccupiedFilter');
