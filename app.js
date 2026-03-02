@@ -1045,7 +1045,7 @@ async function loadNewCallisto() {
             });
         });
 
-        // --- Signage / Shopchests toggle (admin/surveyor) ---
+        // --- Signage / Shopchests / Historic toggle (admin/surveyor) ---
         container.querySelectorAll('.nc-popup-toggle').forEach(el => {
             if (canEdit) {
                 el.style.cursor = 'pointer';
@@ -1064,6 +1064,14 @@ async function loadNewCallisto() {
                             body: JSON.stringify({ [field]: prop[field], last_surveyed: now, updated_at: now })
                         });
                         ncLogChange(prop.id, field, String(oldVal), String(prop[field]));
+                    }
+                    // Re-style marker border for historic toggle
+                    if (field === 'historic' && ncMarkers[pi]) {
+                        const comp = ncGetCompliance(prop);
+                        ncMarkers[pi].setStyle({
+                            color: prop.historic ? 'rgba(212,160,23,0.8)' : (comp && !comp.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
+                            weight: (prop.historic || (comp && !comp.compliant)) ? 2 : 1
+                        });
                     }
                 });
             }
@@ -1229,8 +1237,8 @@ async function loadNewCallisto() {
                         const compliance = ncGetCompliance(prop);
                         ncMarkers[pi].setStyle({
                             fillColor: NC_TYPE_COLORS[newType] || prop.color || '#888',
-                            color: (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
-                            weight: (compliance && !compliance.compliant) ? 2 : 1
+                            color: prop.historic ? 'rgba(212,160,23,0.8)' : (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)',
+                            weight: (prop.historic || (compliance && !compliance.compliant)) ? 2 : 1
                         });
                     }
                     renderNCPanel(ncProperties);
@@ -1425,6 +1433,9 @@ function buildPopupHTML(prop, canEdit, pi) {
         h += `<div class="nc-prop-detail"><span>Compliance</span><span class="value">${badge}</span></div>`;
     }
 
+    // Historic designation
+    h += `<div class="nc-prop-detail"><span>Protected</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="historic">${prop.historic ? '\u2705' : '\u274C'}</span></div>`;
+
     if (prop.last_surveyed) h += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
     if (prop.sale_link) h += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
 
@@ -1447,8 +1458,9 @@ function renderNCMarkers(properties) {
 
         const dotColor = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
         const compliance = ncGetCompliance(prop);
-        const markerBorder = (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)';
-        const markerWeight = (compliance && !compliance.compliant) ? 2 : 1;
+        const markerBorder = prop.historic ? 'rgba(212,160,23,0.8)'
+            : (compliance && !compliance.compliant) ? 'rgba(224,64,64,0.7)' : 'rgba(255,255,255,0.5)';
+        const markerWeight = (prop.historic || (compliance && !compliance.compliant)) ? 2 : 1;
         const marker = L.circleMarker([-prop.z, prop.x], {
             radius: 6,
             fillColor: dotColor,
@@ -1624,6 +1636,7 @@ let ncFilterType = null;   // active type filter
 let ncFilterStatus = null; // active status filter
 let ncFilterUnoccupied = false; // show only unoccupied
 let ncFilterNonCompliant = false; // show only non-compliant commercial
+let ncFilterProtected = false;    // show only historically protected
 
 function filterNCMarkers(query) {
     const q = query.toLowerCase().trim();
@@ -1651,6 +1664,10 @@ function filterNCMarkers(query) {
             const comp = ncGetCompliance(p);
             if (!comp || comp.compliant) { ncMap.removeLayer(marker); return; }
         }
+        // Check protected filter
+        if (ncFilterProtected && !p.historic) {
+            ncMap.removeLayer(marker); return;
+        }
         // Check text search
         const s = [p.name, p.owner, p.type, p.address, p.status].filter(Boolean).join(' ').toLowerCase();
         const match = !q || s.includes(q);
@@ -1677,6 +1694,7 @@ function ncClearAllFilters() {
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
+    ncFilterProtected = false;
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     document.getElementById('ncSearchInput').value = '';
     const uf = document.getElementById('ncUnoccupiedFilter');
@@ -1690,6 +1708,7 @@ document.getElementById('ncSearchInput').addEventListener('input', (e) => {
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
+    ncFilterProtected = false;
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf = document.getElementById('ncUnoccupiedFilter');
     if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
@@ -1703,15 +1722,17 @@ document.querySelectorAll('.nc-legend-item[data-type]').forEach(item => {
     item.addEventListener('click', () => {
         const type = item.dataset.type;
         document.getElementById('ncSearchInput').value = '';
-        // Clear status + unoccupied + compliance filters
+        // Clear status + unoccupied + compliance + protected filters
         ncFilterStatus = null;
         ncFilterUnoccupied = false;
         ncFilterNonCompliant = false;
+        ncFilterProtected = false;
         document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
         const uf = document.getElementById('ncUnoccupiedFilter');
         if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
         const cf = document.getElementById('ncComplianceFilter');
         if (cf) cf.classList.remove('active');
+        document.getElementById('ncProtectedFilter').classList.remove('active');
         if (ncFilterType === type) {
             ncFilterType = null;
             item.classList.remove('active');
@@ -1728,14 +1749,16 @@ document.querySelectorAll('.nc-legend-item[data-type]').forEach(item => {
 document.getElementById('ncUnoccupiedFilter').addEventListener('click', () => {
     const el = document.getElementById('ncUnoccupiedFilter');
     document.getElementById('ncSearchInput').value = '';
-    // Clear type, status, and compliance filters
+    // Clear type, status, compliance, and protected filters
     ncFilterType = null;
     ncFilterStatus = null;
     ncFilterNonCompliant = false;
+    ncFilterProtected = false;
     document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('#ncStatusLegend .nc-legend-item.active').forEach(e => e.classList.remove('active'));
     const cf = document.getElementById('ncComplianceFilter');
     if (cf) cf.classList.remove('active');
+    document.getElementById('ncProtectedFilter').classList.remove('active');
     ncFilterUnoccupied = !ncFilterUnoccupied;
     el.classList.toggle('active', ncFilterUnoccupied);
     el.textContent = ncFilterUnoccupied ? 'Show Occupied' : 'Hide Occupied';
@@ -1747,15 +1770,17 @@ document.querySelectorAll('.nc-legend-item[data-status]').forEach(item => {
     item.addEventListener('click', () => {
         const status = item.dataset.status;
         document.getElementById('ncSearchInput').value = '';
-        // Clear type + unoccupied + compliance filters
+        // Clear type + unoccupied + compliance + protected filters
         ncFilterType = null;
         ncFilterUnoccupied = false;
         ncFilterNonCompliant = false;
+        ncFilterProtected = false;
         document.querySelectorAll('#ncLegend .nc-legend-item.active').forEach(el => el.classList.remove('active'));
         const uf = document.getElementById('ncUnoccupiedFilter');
         if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
         const cf2 = document.getElementById('ncComplianceFilter');
         if (cf2) cf2.classList.remove('active');
+        document.getElementById('ncProtectedFilter').classList.remove('active');
         if (ncFilterStatus === status) {
             ncFilterStatus = null;
             item.classList.remove('active');
@@ -1781,7 +1806,27 @@ document.getElementById('ncComplianceFilter').addEventListener('click', () => {
     const uf = document.getElementById('ncUnoccupiedFilter');
     if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
     ncFilterNonCompliant = !ncFilterNonCompliant;
+    ncFilterProtected = false;
+    document.getElementById('ncProtectedFilter').classList.remove('active');
     el.classList.toggle('active', ncFilterNonCompliant);
+    filterNCMarkers('');
+});
+
+// Protected (historic) filter
+document.getElementById('ncProtectedFilter').addEventListener('click', () => {
+    const el = document.getElementById('ncProtectedFilter');
+    document.getElementById('ncSearchInput').value = '';
+    ncFilterType = null;
+    ncFilterStatus = null;
+    ncFilterUnoccupied = false;
+    ncFilterNonCompliant = false;
+    document.querySelectorAll('#ncLegend .nc-legend-item[data-type].active').forEach(e => e.classList.remove('active'));
+    document.querySelectorAll('#ncStatusLegend .nc-legend-item[data-status].active').forEach(e => e.classList.remove('active'));
+    document.getElementById('ncComplianceFilter').classList.remove('active');
+    const uf = document.getElementById('ncUnoccupiedFilter');
+    if (uf) { uf.classList.remove('active'); uf.textContent = 'Hide Occupied'; }
+    ncFilterProtected = !ncFilterProtected;
+    el.classList.toggle('active', ncFilterProtected);
     filterNCMarkers('');
 });
 
@@ -1791,6 +1836,7 @@ document.getElementById('ncTypeShowAll').addEventListener('click', () => {
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
+    ncFilterProtected = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf1 = document.getElementById('ncUnoccupiedFilter');
@@ -1802,6 +1848,7 @@ document.getElementById('ncStatusShowAll').addEventListener('click', () => {
     ncFilterStatus = null;
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
+    ncFilterProtected = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf2 = document.getElementById('ncUnoccupiedFilter');
@@ -1811,7 +1858,7 @@ document.getElementById('ncStatusShowAll').addEventListener('click', () => {
 
 // Table view
 let ncTableSort = { col: null, asc: true };
-const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_account', 'trust_deposit', 'appraised_value', 'tenant', 'type', 'status', 'signage', 'shopchests', 'last_surveyed', 'x', 'z'];
+const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_account', 'trust_deposit', 'appraised_value', 'tenant', 'type', 'status', 'signage', 'shopchests', 'historic', 'last_surveyed', 'x', 'z'];
 const NC_STATUS_COLORS = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
 let ncDirtyRows = new Set(); // track modified property ids/indices for save
 let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
@@ -1866,7 +1913,7 @@ function renderNCTable(properties, filter = '') {
         thead.innerHTML = '';
         // Locate column first (far left)
         const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
-        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', trust_deposit: 'Trust', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', trust_deposit: 'Trust', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', historic: 'Protected', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
         NC_TABLE_COLS.forEach((col, ci) => {
             const th = document.createElement('th');
             if (!ncVisibleCols.has(col)) { th.style.display = 'none'; }
@@ -1928,6 +1975,7 @@ function renderNCTable(properties, filter = '') {
         const vis = col => ncVisibleCols.has(col) ? '' : ' style="display:none"';
         const signIcon = prop.signage ? '\u2705' : '\u274C';
         const shopIcon = prop.shopchests ? '\u2705' : '\u274C';
+        const histIcon = prop.historic ? '\u2705' : '\u274C';
         tr.innerHTML = `
             <td><button class="nc-table-locate" title="Show on map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></button></td>
             <td data-field="name"${vis('name')}>${prop.name || 'Unnamed'}</td>
@@ -1942,6 +1990,7 @@ function renderNCTable(properties, filter = '') {
             <td data-field="status"${vis('status')}>${prop.status ? `<span class="nc-status-badge" style="background:${sc};">${prop.status}</span>` : ''}</td>
             <td data-field="signage"${vis('signage')}><span class="nc-binary-icon">${signIcon}</span></td>
             <td data-field="shopchests"${vis('shopchests')}><span class="nc-binary-icon">${shopIcon}</span></td>
+            <td data-field="historic"${vis('historic')}><span class="nc-binary-icon">${histIcon}</span></td>
             <td data-field="last_surveyed"${vis('last_surveyed')}>${fmtDate(prop.last_surveyed)}</td>
             <td data-field="x"${vis('x')}>${prop.x}</td>
             <td data-field="z"${vis('z')}>${prop.z}</td>
@@ -2037,7 +2086,7 @@ function renderNCTable(properties, filter = '') {
                     return;
                 }
                 // Signage / Shopchests get toggle buttons
-                if (field === 'signage' || field === 'shopchests') {
+                if (field === 'signage' || field === 'shopchests' || field === 'historic') {
                     td.innerHTML = '';
                     td.style.textAlign = 'center';
                     const btn = document.createElement('button');
@@ -3052,7 +3101,7 @@ document.getElementById('ncColToggleBtn').addEventListener('click', (e) => {
     popup.classList.toggle('open');
     if (popup.classList.contains('open')) {
         popup.innerHTML = '';
-        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', appraised_value: 'Value', type: 'Type', status: 'Status', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', appraised_value: 'Value', type: 'Type', status: 'Status', historic: 'Protected', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
         NC_TABLE_COLS.forEach(col => {
             const label = document.createElement('label');
             label.className = 'nc-col-option';
@@ -3087,7 +3136,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
         const editBtn = document.getElementById('ncEditToggleBtn');
         editBtn.textContent = 'Saving...';
         editBtn.disabled = true;
-        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'trust_deposit', 'type', 'status', 'signage', 'shopchests', 'hs_account', 'last_surveyed', 'x', 'z', 'image_url'];
+        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'trust_deposit', 'type', 'status', 'signage', 'shopchests', 'historic', 'hs_account', 'last_surveyed', 'x', 'z', 'image_url'];
         try {
             for (const idx of ncDirtyRows) {
                 const prop = ncProperties[idx];
@@ -3099,7 +3148,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
                     x: prop.x, z: prop.z, color: prop.color || null,
                     sale_link: prop.sale_link || null, appraised_value: prop.appraised_value || null,
                     status: prop.status || null, last_surveyed: prop.last_surveyed || null,
-                    signage: prop.signage || false, shopchests: prop.shopchests || false,
+                    signage: prop.signage || false, shopchests: prop.shopchests || false, historic: prop.historic || false,
                     hs_account: prop.hs_account || null, trust_deposit: prop.trust_deposit ?? 0,
                     image_url: prop.image_url || null, updated_at: new Date().toISOString()
                 };
