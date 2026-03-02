@@ -102,25 +102,12 @@ function navigate() {
     const path = window.location.pathname;
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
 
-    if (path === '/orderbook') {
-        document.getElementById('orderbookView').classList.add('active');
-        document.body.classList.remove('landing');
-        if (!currentUser) {
-            document.getElementById('loginGateModal').classList.add('active');
-        } else {
-            document.getElementById('loginGateModal').classList.remove('active');
-        }
-        loadEquities();
-    } else if (path === '/orderhistory') {
-        if (!currentUser) {
-            history.replaceState(null, '', '/home');
-            document.getElementById('landingView').classList.add('active');
-            document.body.classList.add('landing');
-            return;
-        }
-        document.getElementById('orderHistoryView').classList.add('active');
-        document.body.classList.remove('landing');
-        loadOrderHistory();
+    if (path === '/orderbook' || path === '/orderhistory') {
+        // Orderbook hidden — Monument Bank exchange is now primary
+        history.replaceState(null, '', '/home');
+        document.getElementById('landingView').classList.add('active');
+        document.body.classList.add('landing');
+        return;
     } else if (path === '/profile') {
         if (!currentUser) {
             history.replaceState(null, '', '/home');
@@ -204,11 +191,7 @@ function updateAuthUI() {
         toggleBtn.textContent = adminViewMode ? 'Client View' : 'Admin View';
     }
 
-    if (window.location.pathname === '/orderbook') {
-        const gate = document.getElementById('loginGateModal');
-        if (gate) gate.classList.toggle('active', !currentUser);
-        loadEquities();
-    }
+    // Orderbook gate removed — Monument Bank exchange is now primary
 
     // Show/hide admin user management nav link
     const userMgmtLink = document.getElementById('userMgmtLink');
@@ -224,7 +207,7 @@ function toggleAdminView() {
 
 function loginWithDiscord() {
     const redirect = (window.location.pathname === '/home' || window.location.pathname === '/')
-        ? '/orderbook' : window.location.pathname;
+        ? '/new-callisto' : window.location.pathname;
     window.location.href = `${CONFIG.workerUrl}/auth/discord?redirect=${encodeURIComponent(redirect)}&origin=${encodeURIComponent(window.location.origin)}`;
 }
 
@@ -3286,7 +3269,7 @@ document.getElementById('ncUnsavedCancel').addEventListener('click', () => {
     // Pick up JWT from Worker callback
     if (tokenParam) {
         localStorage.setItem('mf_token', tokenParam);
-        authRedirect = url.searchParams.get('redirect') || '/orderbook';
+        authRedirect = url.searchParams.get('redirect') || '/new-callisto';
         url.searchParams.delete('token');
         url.searchParams.delete('redirect');
         url.searchParams.delete('auth_error');

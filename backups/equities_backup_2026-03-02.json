@@ -1,0 +1,10 @@
+[{"id":1,"ticker":"$TUSK","company_name":"Tusk Armory","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":2,"ticker":"$AGOR","company_name":"Agora Corporation","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":3,"ticker":"$MG","company_name":"Monument Group","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":4,"ticker":"$PVTC","company_name":"Pan-Voldi Trading Corporation","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":5,"ticker":"$ZEAL","company_name":"Zeal Corp","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":6,"ticker":"$SETF","company_name":"Starboard ETF","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":7,"ticker":"$GW","company_name":"Gabon & Westmore","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":8,"ticker":"$NORD","company_name":"Nord Co.","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":9,"ticker":"$LYRA","company_name":"Lyrean Rail","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}, 
+ {"id":10,"ticker":"$RAC","company_name":"Royal Anvard Corporation","is_active":true,"created_at":"2026-02-16T18:01:13.291347+00:00"}]
