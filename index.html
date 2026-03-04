@@ -2659,29 +2659,22 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 1001;
-            display: flex;
+            padding: 0.35rem 1.2rem;
+            font-size: 0.72rem;
+            font-family: 'Raleway', sans-serif;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text);
             background: rgba(55, 55, 80, 0.95);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(184, 180, 204, 0.2);
             border-radius: 6px;
-            overflow: hidden;
-        }
-        .nc-mode-btn {
-            padding: 0.35rem 0.9rem;
-            font-size: 0.72rem;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            background: transparent;
-            border: none;
             cursor: pointer;
-            transition: background 0.15s, color 0.15s;
+            transition: border-color 0.2s, background 0.2s;
         }
-        .nc-mode-btn:hover { background: rgba(255,255,255,0.08); }
-        .nc-mode-btn.active {
-            background: var(--accent);
-            color: #fff;
+        .nc-mode-toggle:hover {
+            border-color: var(--accent);
+            background: rgba(55, 55, 80, 1);
         }
 
         /* Shop Explorer — bottom bar selects */
@@ -3053,10 +3046,7 @@
         <div id="ncMap"></div>
         <div class="nc-coords" id="ncCoords"></div>
         <!-- Mode Toggle -->
-        <div class="nc-mode-toggle" id="ncModeToggle">
-            <button class="nc-mode-btn active" data-mode="registrar">Registrar</button>
-            <button class="nc-mode-btn" data-mode="shops">Shops</button>
-        </div>
+        <button class="nc-mode-toggle" id="ncModeToggle">Go Shopping</button>
         <!-- Shop Explorer Bottom Bar (hidden by default) -->
         <div class="nc-bottom-bar nc-shop-ui" id="ncShopBar" style="display:none;">
             <div class="nc-bottom-btns">
@@ -3360,11 +3350,11 @@
         </div>
     </div>
 
-    <script src="app.js?v=107"></script>
-    <script src="nc-map.js?v=107"></script>
-    <script src="nc-table.js?v=107"></script>
-    <script src="nc-modals.js?v=107"></script>
-    <script src="nc-shops.js?v=107"></script>
-    <script src="nc-init.js?v=107"></script>
+    <script src="app.js?v=108"></script>
+    <script src="nc-map.js?v=108"></script>
+    <script src="nc-table.js?v=108"></script>
+    <script src="nc-modals.js?v=108"></script>
+    <script src="nc-shops.js?v=108"></script>
+    <script src="nc-init.js?v=108"></script>
 </body>
 </html>

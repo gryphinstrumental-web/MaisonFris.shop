@@ -14,24 +14,17 @@ const TRADEX_API = 'https://api.tradex.civinfo.net/exchanges/search';
 // ============================================
 // Mode Toggle
 // ============================================
-document.getElementById('ncModeToggle').addEventListener('click', (e) => {
-    const btn = e.target.closest('.nc-mode-btn');
-    if (!btn) return;
-    const mode = btn.dataset.mode;
-    if ((mode === 'shops' && ncShopMode) || (mode === 'registrar' && !ncShopMode)) return;
-
-    document.querySelectorAll('.nc-mode-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    if (mode === 'shops') {
-        ncEnterShopMode();
-    } else {
+document.getElementById('ncModeToggle').addEventListener('click', () => {
+    if (ncShopMode) {
         ncExitShopMode();
+    } else {
+        ncEnterShopMode();
     }
 });
 
 function ncEnterShopMode() {
     ncShopMode = true;
+    document.getElementById('ncModeToggle').textContent = 'View Registry';
     // Hide registrar UI
     document.querySelectorAll('.nc-registrar-ui').forEach(el => el.style.display = 'none');
     // Hide property markers
@@ -44,6 +37,7 @@ function ncEnterShopMode() {
 
 function ncExitShopMode() {
     ncShopMode = false;
+    document.getElementById('ncModeToggle').textContent = 'Go Shopping';
     // Hide shop UI
     document.querySelectorAll('.nc-shop-ui').forEach(el => el.style.display = 'none');
     // Clear shop markers
