@@ -264,32 +264,113 @@ function ncShopPopupHTML(exchanges) {
 }
 
 // ============================================
-// Event Handlers
+// Card Selection, Zoom & Carousel
 // ============================================
+let ncShopSelectedIdx = -1;
 
-// Click on result card → pan to location
-document.getElementById('ncShopResults').addEventListener('click', (e) => {
-    const coords = e.target.closest('.nc-shop-coords');
-    if (coords) {
-        const x = parseFloat(coords.dataset.x);
-        const z = parseFloat(coords.dataset.z);
-        ncMap.setView([-z, x], 1);
-        return;
+function ncShopSelectCard(idx) {
+    ncShopSelectedIdx = idx;
+    const container = document.getElementById('ncShopResults');
+
+    // Highlight active card
+    container.querySelectorAll('.nc-shop-card').forEach(c => c.classList.remove('active'));
+    const card = container.querySelector(`.nc-shop-card[data-idx="${idx}"]`);
+    if (card) {
+        card.classList.add('active');
+        // Center card in carousel
+        const containerRect = container.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        const scrollOffset = card.offsetLeft - container.offsetLeft - (containerRect.width / 2) + (cardRect.width / 2);
+        container.scrollTo({ left: scrollOffset, behavior: 'smooth' });
     }
+
+    // Zoom map to max and center on trade location
+    const ex = ncShopFiltered[idx];
+    if (ex) {
+        ncMap.setView([-ex.pos.z, ex.pos.x], 3);
+    }
+}
+
+// Click on result card → select it
+document.getElementById('ncShopResults').addEventListener('click', (e) => {
     const card = e.target.closest('.nc-shop-card');
     if (card) {
-        const idx = parseInt(card.dataset.idx);
-        const ex = ncShopFiltered[idx];
-        if (ex) ncMap.setView([-ex.pos.z, ex.pos.x], 1);
+        ncShopSelectCard(parseInt(card.dataset.idx));
     }
 });
 
-// Scroll arrows for shop panel
+// Scroll arrows — infinite wrap
 document.getElementById('ncShopPanelLeft').addEventListener('click', () => {
-    document.getElementById('ncShopResults').scrollBy({ left: -400, behavior: 'smooth' });
+    if (ncShopFiltered.length === 0) return;
+    let next = ncShopSelectedIdx - 1;
+    if (next < 0) next = ncShopFiltered.length - 1;
+    ncShopSelectCard(next);
 });
 document.getElementById('ncShopPanelRight').addEventListener('click', () => {
-    document.getElementById('ncShopResults').scrollBy({ left: 400, behavior: 'smooth' });
+    if (ncShopFiltered.length === 0) return;
+    let next = ncShopSelectedIdx + 1;
+    if (next >= ncShopFiltered.length) next = 0;
+    ncShopSelectCard(next);
+});
+
+// Touch swipe support
+(function() {
+    const container = document.getElementById('ncShopResults');
+    let startX = 0;
+    let startScrollLeft = 0;
+    let isDragging = false;
+
+    container.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startScrollLeft = container.scrollLeft;
+        isDragging = true;
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const dx = e.touches[0].clientX - startX;
+        container.scrollLeft = startScrollLeft - dx;
+    }, { passive: true });
+
+    container.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+
+    // Mouse drag support
+    container.addEventListener('mousedown', (e) => {
+        startX = e.clientX;
+        startScrollLeft = container.scrollLeft;
+        isDragging = true;
+        container.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        container.scrollLeft = startScrollLeft - dx;
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            container.style.cursor = '';
+        }
+    });
+})();
+
+// Keyboard left/right arrow support
+document.addEventListener('keydown', (e) => {
+    if (!ncShopMode || ncShopFiltered.length === 0) return;
+    if (e.key === 'ArrowLeft') {
+        let next = ncShopSelectedIdx - 1;
+        if (next < 0) next = ncShopFiltered.length - 1;
+        ncShopSelectCard(next);
+    } else if (e.key === 'ArrowRight') {
+        let next = ncShopSelectedIdx + 1;
+        if (next >= ncShopFiltered.length) next = 0;
+        ncShopSelectCard(next);
+    }
 });
 
 // Filter change handlers
