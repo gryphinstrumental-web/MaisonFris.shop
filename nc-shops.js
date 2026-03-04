@@ -11,17 +11,6 @@ const NC_SHOP_CENTER = { x: -3163, z: 8168 };
 const NC_SHOP_BOUNDS = { minX: -3550, maxX: -2750, minZ: 7750, maxZ: 8550 };
 const TRADEX_API = 'https://api.tradex.civinfo.net/exchanges/search';
 
-const ENCHANT_NAMES = [
-    'Aqua Affinity', 'Bane of Arthropods', 'Blast Protection', 'Channeling',
-    'Depth Strider', 'Efficiency', 'Feather Falling', 'Fire Aspect',
-    'Fire Protection', 'Flame', 'Fortune', 'Frost Walker', 'Impaling',
-    'Infinity', 'Knockback', 'Looting', 'Loyalty', 'Luck of the Sea',
-    'Lure', 'Mending', 'Multishot', 'Piercing', 'Power', 'Projectile Protection',
-    'Protection', 'Punch', 'Quick Charge', 'Respiration', 'Riptide',
-    'Sharpness', 'Silk Touch', 'Smite', 'Soul Speed', 'Sweeping Edge',
-    'Swift Sneak', 'Thorns', 'Unbreaking'
-];
-
 // ============================================
 // Mode Toggle
 // ============================================
@@ -47,16 +36,16 @@ function ncEnterShopMode() {
     document.querySelectorAll('.nc-registrar-ui').forEach(el => el.style.display = 'none');
     // Hide property markers
     ncMarkers.forEach(m => ncMap.removeLayer(m));
-    // Show shop panel
-    document.getElementById('ncShopPanel').style.display = 'block';
+    // Show shop UI
+    document.querySelectorAll('.nc-shop-ui').forEach(el => el.style.display = 'flex');
     // Fetch shop data
     ncFetchShops();
 }
 
 function ncExitShopMode() {
     ncShopMode = false;
-    // Hide shop panel
-    document.getElementById('ncShopPanel').style.display = 'none';
+    // Hide shop UI
+    document.querySelectorAll('.nc-shop-ui').forEach(el => el.style.display = 'none');
     // Clear shop markers
     ncShopMarkers.forEach(m => ncMap.removeLayer(m));
     ncShopMarkers = [];
@@ -99,7 +88,7 @@ async function ncFetchShops() {
         ncFilterShops();
     } catch (err) {
         console.error('Tradex fetch error:', err);
-        results.innerHTML = '<div class="nc-shop-empty">Failed to load shop data. Try again later.</div>';
+        results.innerHTML = '<div class="nc-shop-empty">Failed to load shop data.</div>';
     }
 }
 
@@ -110,49 +99,23 @@ function ncFilterShops() {
     const freshDays = parseInt(document.getElementById('ncShopFreshness').value) || 0;
     const showUnstocked = document.getElementById('ncShopUnstocked').checked;
 
-    // Collect enchantment filters
-    const enchantFilters = [];
-    document.querySelectorAll('.nc-shop-enchant-row').forEach(row => {
-        const name = row.querySelector('select').value;
-        const level = parseInt(row.querySelector('input').value) || 0;
-        if (name) enchantFilters.push({ name, level });
-    });
-
     const now = Date.now();
     const freshCutoff = freshDays > 0 ? now - (freshDays * 86400000) : 0;
 
     ncShopFiltered = ncShopExchanges.filter(e => {
-        // Stock filter
         if (!showUnstocked && e.stock <= 0) return false;
-
-        // Freshness filter
         if (freshCutoff && e.time < freshCutoff) return false;
 
-        // Search filter (matches output item name — what the shop sells)
         if (searchQ) {
             const outName = (e.output?.material || '').toLowerCase();
             const outCustom = (e.output?.customName || '').toLowerCase();
             if (!outName.includes(searchQ) && !outCustom.includes(searchQ)) return false;
         }
 
-        // Pay-with filter (matches input item name — what the shop accepts)
         if (payWithQ) {
             const inName = (e.input?.material || '').toLowerCase();
             const inCustom = (e.input?.customName || '').toLowerCase();
             if (!inName.includes(payWithQ) && !inCustom.includes(payWithQ)) return false;
-        }
-
-        // Enchantment filters
-        if (enchantFilters.length > 0) {
-            const outEnchants = e.output?.storedEnchants || {};
-            for (const ef of enchantFilters) {
-                const enchLevel = outEnchants[ef.name] || 0;
-                if (ef.level > 0) {
-                    if (enchLevel < ef.level) return false;
-                } else {
-                    if (!enchLevel) return false;
-                }
-            }
         }
 
         return true;
@@ -168,7 +131,6 @@ function ncFilterShops() {
     } else if (sortMode === 'newest') {
         ncShopFiltered.sort((a, b) => b.time - a.time);
     } else {
-        // closest — sort by distance to NC center
         ncShopFiltered.sort((a, b) => {
             const dA = Math.hypot(a.pos.x - NC_SHOP_CENTER.x, a.pos.z - NC_SHOP_CENTER.z);
             const dB = Math.hypot(b.pos.x - NC_SHOP_CENTER.x, b.pos.z - NC_SHOP_CENTER.z);
@@ -181,7 +143,7 @@ function ncFilterShops() {
 }
 
 // ============================================
-// Render Results
+// Render Results (horizontal cards like registrar)
 // ============================================
 function ncRenderShopResults() {
     const container = document.getElementById('ncShopResults');
@@ -202,7 +164,6 @@ function ncRenderShopResults() {
         const stockClass = e.stock > 0 ? 'in-stock' : 'out-stock';
         const stockText = e.stock > 0 ? `In Stock (${e.stock})` : 'Out of Stock';
 
-        // Freshness
         const age = Date.now() - e.time;
         const freshClass = age < 86400000 ? 'fresh-new' : age < 604800000 ? 'fresh-mid' : 'fresh-old';
         const freshText = ncFormatAge(e.time);
@@ -218,7 +179,7 @@ function ncRenderShopResults() {
             <div class="nc-shop-meta">
                 <span class="nc-shop-stock ${stockClass}">${stockText}</span>
                 <span class="nc-shop-fresh ${freshClass}">${freshText}</span>
-                <span class="nc-shop-coords" data-x="${e.pos.x}" data-z="${e.pos.z}">\u{1F4CD} ${e.pos.x}, ${e.pos.z}</span>
+                <span class="nc-shop-coords" data-x="${e.pos.x}" data-z="${e.pos.z}">${e.pos.x}, ${e.pos.z}</span>
             </div>
         </div>`;
     });
@@ -245,11 +206,9 @@ function ncFormatAge(timestamp) {
 // Render Map Markers
 // ============================================
 function ncRenderShopMarkers() {
-    // Clear old markers
     ncShopMarkers.forEach(m => ncMap.removeLayer(m));
     ncShopMarkers = [];
 
-    // Group by location
     const grouped = {};
     ncShopFiltered.forEach(e => {
         const key = `${e.pos.x},${e.pos.y},${e.pos.z}`;
@@ -297,7 +256,6 @@ function ncShopPopupHTML(exchanges) {
         h += `<div style="font-size:0.78rem;"><strong>${e.input?.count || 1}x</strong> ${ncEsc(inName)} <span style="color:var(--text-muted);">&rarr;</span> <strong>${e.output?.count || 1}x</strong> ${ncEsc(outName)}</div>`;
         h += `<div style="font-size:0.65rem;margin-top:0.15rem;"><span style="${stockClass};font-weight:600;">${stockText}</span> &middot; ${ncFormatAge(e.time)}</div>`;
 
-        // Show enchantments if any
         const enchants = e.output?.storedEnchants || {};
         const enchList = Object.entries(enchants);
         if (enchList.length > 0) {
@@ -332,37 +290,17 @@ document.getElementById('ncShopResults').addEventListener('click', (e) => {
     }
 });
 
+// Scroll arrows for shop panel
+document.getElementById('ncShopPanelLeft').addEventListener('click', () => {
+    document.getElementById('ncShopResults').scrollBy({ left: -400, behavior: 'smooth' });
+});
+document.getElementById('ncShopPanelRight').addEventListener('click', () => {
+    document.getElementById('ncShopResults').scrollBy({ left: 400, behavior: 'smooth' });
+});
+
 // Filter change handlers
 document.getElementById('ncShopSearch').addEventListener('input', () => { if (ncShopMode) ncFilterShops(); });
 document.getElementById('ncShopPayWith').addEventListener('input', () => { if (ncShopMode) ncFilterShops(); });
 document.getElementById('ncShopSort').addEventListener('change', () => { if (ncShopMode) ncFilterShops(); });
 document.getElementById('ncShopFreshness').addEventListener('change', () => { if (ncShopMode) ncFilterShops(); });
 document.getElementById('ncShopUnstocked').addEventListener('change', () => { if (ncShopMode) ncFilterShops(); });
-
-// Enchantment filter — add row
-document.getElementById('ncShopAddEnchant').addEventListener('click', () => {
-    const container = document.getElementById('ncShopEnchants');
-    const row = document.createElement('div');
-    row.className = 'nc-shop-enchant-row';
-
-    const sel = document.createElement('select');
-    sel.innerHTML = '<option value="">Select...</option>' + ENCHANT_NAMES.map(n => `<option value="${n}">${n}</option>`).join('');
-    sel.addEventListener('change', () => { if (ncShopMode) ncFilterShops(); });
-
-    const lvl = document.createElement('input');
-    lvl.type = 'number';
-    lvl.min = '0';
-    lvl.max = '10';
-    lvl.placeholder = 'Lvl';
-    lvl.addEventListener('input', () => { if (ncShopMode) ncFilterShops(); });
-
-    const rm = document.createElement('button');
-    rm.className = 'nc-shop-enchant-rm';
-    rm.textContent = '\u00d7';
-    rm.addEventListener('click', () => { row.remove(); if (ncShopMode) ncFilterShops(); });
-
-    row.appendChild(sel);
-    row.appendChild(lvl);
-    row.appendChild(rm);
-    container.appendChild(row);
-});
