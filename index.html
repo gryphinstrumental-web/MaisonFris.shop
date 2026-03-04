@@ -2652,6 +2652,207 @@
         .nc-ordinance-body ul { padding-left: 1.2rem; margin-bottom: 0.5rem; }
         .nc-ordinance-body li { margin-bottom: 0.2rem; }
 
+        /* Mode Toggle */
+        .nc-mode-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1001;
+            display: flex;
+            background: rgba(55, 55, 80, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .nc-mode-btn {
+            padding: 0.35rem 0.9rem;
+            font-size: 0.72rem;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .nc-mode-btn:hover { background: rgba(255,255,255,0.08); }
+        .nc-mode-btn.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        /* Shop Explorer Panel */
+        .nc-shop-panel {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 340px;
+            z-index: 1000;
+            background: rgba(45, 45, 70, 0.97);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(184, 180, 204, 0.15);
+            overflow-y: auto;
+            font-size: 0.78rem;
+        }
+        .nc-shop-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1rem 0.5rem;
+        }
+        .nc-shop-header h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            color: var(--text);
+            margin: 0;
+        }
+        .nc-shop-count {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            letter-spacing: 0.04em;
+        }
+        .nc-shop-filters {
+            padding: 0.5rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            border-bottom: 1px solid rgba(184,180,204,0.1);
+            padding-bottom: 0.8rem;
+        }
+        .nc-shop-filters input[type="text"],
+        .nc-shop-filters select {
+            width: 100%;
+            padding: 0.4rem 0.6rem;
+            background: rgba(90, 90, 128, 0.4);
+            border: 1px solid rgba(184, 180, 204, 0.15);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.75rem;
+            font-family: 'Inter', sans-serif;
+        }
+        .nc-shop-filters input::placeholder { color: var(--text-muted); }
+        .nc-shop-filter-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nc-shop-filter-row label {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            min-width: 75px;
+        }
+        .nc-shop-filter-row select { flex: 1; }
+        .nc-shop-toggles {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        .nc-shop-toggles label { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+        .nc-shop-toggles input[type="checkbox"] { accent-color: var(--accent); }
+        .nc-shop-add-enchant {
+            background: transparent;
+            border: 1px dashed rgba(184,180,204,0.2);
+            color: var(--text-muted);
+            padding: 0.3rem;
+            border-radius: 4px;
+            font-size: 0.68rem;
+            cursor: pointer;
+            text-align: center;
+        }
+        .nc-shop-add-enchant:hover { border-color: var(--accent); color: var(--accent); }
+        .nc-shop-enchant-row {
+            display: flex;
+            gap: 0.3rem;
+            align-items: center;
+        }
+        .nc-shop-enchant-row select,
+        .nc-shop-enchant-row input {
+            flex: 1;
+            padding: 0.3rem 0.4rem;
+            background: rgba(90, 90, 128, 0.4);
+            border: 1px solid rgba(184, 180, 204, 0.15);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.7rem;
+        }
+        .nc-shop-enchant-row input { max-width: 40px; text-align: center; }
+        .nc-shop-enchant-rm {
+            background: transparent;
+            border: none;
+            color: #e04040;
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 0 0.2rem;
+        }
+
+        /* Shop Results */
+        .nc-shop-results { padding: 0.5rem; }
+        .nc-shop-empty {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 2rem 1rem;
+            font-size: 0.75rem;
+        }
+        .nc-shop-card {
+            background: rgba(90, 90, 128, 0.3);
+            border: 1px solid rgba(184, 180, 204, 0.1);
+            border-radius: 6px;
+            padding: 0.6rem 0.7rem;
+            margin-bottom: 0.4rem;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .nc-shop-card:hover {
+            border-color: rgba(184, 180, 204, 0.3);
+            background: rgba(90, 90, 128, 0.45);
+        }
+        .nc-shop-trade {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--text);
+        }
+        .nc-shop-trade .arrow { color: var(--text-muted); font-size: 0.85rem; }
+        .nc-shop-item-name { font-weight: 500; }
+        .nc-shop-item-count { color: var(--text-muted); font-size: 0.7rem; }
+        .nc-shop-custom-name { color: var(--accent); font-style: italic; font-size: 0.7rem; }
+        .nc-shop-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 0.3rem;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        .nc-shop-stock {
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 600;
+        }
+        .nc-shop-stock.in-stock { background: rgba(76,175,80,0.2); color: #4caf50; }
+        .nc-shop-stock.out-stock { background: rgba(224,64,64,0.2); color: #e04040; }
+        .nc-shop-fresh { font-size: 0.6rem; }
+        .nc-shop-fresh.fresh-new { color: #4caf50; }
+        .nc-shop-fresh.fresh-mid { color: #e6a817; }
+        .nc-shop-fresh.fresh-old { color: #e04040; }
+        .nc-shop-coords { cursor: pointer; }
+        .nc-shop-coords:hover { color: var(--accent); }
+        .nc-shop-loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
         .nc-panel {
             position: absolute;
             bottom: 0;
@@ -2938,7 +3139,49 @@
     <div class="view nc-map-view" id="newCallistoView">
         <div id="ncMap"></div>
         <div class="nc-coords" id="ncCoords"></div>
-        <div class="nc-table-btn" id="ncTableBtn" title="Property Table">
+        <!-- Mode Toggle -->
+        <div class="nc-mode-toggle" id="ncModeToggle">
+            <button class="nc-mode-btn active" data-mode="registrar">Registrar</button>
+            <button class="nc-mode-btn" data-mode="shops">Shops</button>
+        </div>
+        <!-- Shop Explorer Panel (hidden by default) -->
+        <div class="nc-shop-panel" id="ncShopPanel">
+            <div class="nc-shop-header">
+                <h3>Shop Explorer</h3>
+                <span class="nc-shop-count" id="ncShopCount"></span>
+            </div>
+            <div class="nc-shop-filters">
+                <input type="text" id="ncShopSearch" placeholder="Search items...">
+                <input type="text" id="ncShopPayWith" placeholder="Pay with (e.g. diamond)">
+                <div class="nc-shop-filter-row">
+                    <label>Sort</label>
+                    <select id="ncShopSort">
+                        <option value="closest">Closest</option>
+                        <option value="cheapest">Cheapest</option>
+                        <option value="newest">Newest</option>
+                    </select>
+                </div>
+                <div class="nc-shop-filter-row">
+                    <label>Last Updated</label>
+                    <select id="ncShopFreshness">
+                        <option value="0">Anytime</option>
+                        <option value="7" selected>Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                    </select>
+                </div>
+                <div class="nc-shop-toggles">
+                    <label><input type="checkbox" id="ncShopUnstocked"> Show Unstocked</label>
+                </div>
+                <div class="nc-shop-enchant-section">
+                    <div id="ncShopEnchants"></div>
+                    <button class="nc-shop-add-enchant" id="ncShopAddEnchant">+ Add Enchantment</button>
+                </div>
+            </div>
+            <div class="nc-shop-results" id="ncShopResults">
+                <div class="nc-shop-empty">Switch to Shops mode to browse New Callisto shop chests.</div>
+            </div>
+        </div>
+        <div class="nc-table-btn nc-registrar-ui" id="ncTableBtn" title="Property Table">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
         </div>
         <div class="nc-table-overlay" id="ncTableOverlay">
@@ -2981,7 +3224,7 @@
                 </table>
             </div>
         </div>
-        <div class="nc-legend" id="ncLegend">
+        <div class="nc-legend nc-registrar-ui" id="ncLegend">
             <h3>Property Types</h3>
             <div class="nc-legend-item" data-type="Residential"><span class="nc-legend-dot" style="background: #183dde;"></span> Residential</div>
             <div class="nc-legend-item" data-type="Commercial"><span class="nc-legend-dot" style="background: #2c7d27;"></span> Commercial</div>
@@ -2989,7 +3232,7 @@
             <div class="nc-legend-show-all" id="ncTypeShowAll">Show All</div>
             <div class="nc-legend-item nc-protected-filter" id="ncProtectedFilter" style="margin-top:0.5rem;border-top:1px solid rgba(184,180,204,0.15);padding-top:0.5rem;cursor:pointer;"><span class="nc-legend-dot" style="background: #d4a017;"></span> Protected</div>
         </div>
-        <div class="nc-status-legend" id="ncStatusLegend">
+        <div class="nc-status-legend nc-registrar-ui" id="ncStatusLegend">
             <h3>Property Status</h3>
             <div class="nc-legend-item" data-status="Good Standing"><span class="nc-legend-dot" style="background: #4caf50;"></span> Good Standing</div>
             <div class="nc-legend-item" data-status="Warning"><span class="nc-legend-dot" style="background: #e6a817;"></span> Warning</div>
@@ -2997,7 +3240,7 @@
             <div class="nc-legend-show-all" id="ncStatusShowAll">Show All</div>
             <div class="nc-legend-item nc-compliance-filter" id="ncComplianceFilter" style="margin-top:0.5rem;border-top:1px solid rgba(184,180,204,0.15);padding-top:0.5rem;cursor:pointer;"><span class="nc-legend-dot" style="background: #e04040;"></span> Non-Compliant</div>
         </div>
-        <div class="nc-bottom-bar">
+        <div class="nc-bottom-bar nc-registrar-ui">
             <div class="nc-bottom-btns">
                 <button class="nc-label-toggle" id="ncLabelToggle">Show Labels</button>
                 <button class="nc-label-toggle" id="ncUnoccupiedFilter">Hide Occupied</button>
@@ -3008,7 +3251,7 @@
             </div>
             <div class="nc-props-count" id="ncPropsCount"></div>
         </div>
-        <div class="nc-panel" id="ncPanel">
+        <div class="nc-panel nc-registrar-ui" id="ncPanel">
             <button class="nc-panel-arrow nc-panel-arrow-left" id="ncPanelLeft">&#8249;</button>
             <div class="nc-panel-list" id="ncPanelList"></div>
             <button class="nc-panel-arrow nc-panel-arrow-right" id="ncPanelRight">&#8250;</button>
@@ -3212,10 +3455,11 @@
         </div>
     </div>
 
-    <script src="app.js?v=105"></script>
-    <script src="nc-map.js?v=105"></script>
-    <script src="nc-table.js?v=105"></script>
-    <script src="nc-modals.js?v=105"></script>
-    <script src="nc-init.js?v=105"></script>
+    <script src="app.js?v=106"></script>
+    <script src="nc-map.js?v=106"></script>
+    <script src="nc-table.js?v=106"></script>
+    <script src="nc-modals.js?v=106"></script>
+    <script src="nc-shops.js?v=106"></script>
+    <script src="nc-init.js?v=106"></script>
 </body>
 </html>
