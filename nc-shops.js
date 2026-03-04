@@ -6,10 +6,55 @@ let ncShopMode = false;
 let ncShopMarkers = [];
 let ncShopExchanges = [];  // raw API data (within NC bounds)
 let ncShopFiltered = [];   // after client-side filtering
+let ncShopDataReady = false;
 
 const NC_SHOP_CENTER = { x: -3163, z: 8168 };
 const NC_SHOP_BOUNDS = { minX: -3550, maxX: -2750, minZ: 7750, maxZ: 8550 };
 const TRADEX_API = 'https://api.tradex.civinfo.net/exchanges/search';
+const NC_SHOP_LINK_RADIUS = 15;
+
+// ============================================
+// Background Fetch & Proximity
+// ============================================
+async function ncEnsureShopData() {
+    if (ncShopDataReady) return;
+    try {
+        const resp = await fetch(TRADEX_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                pos: { server: 'play.civmc.net', world: 'overworld', x: NC_SHOP_CENTER.x, y: 64, z: NC_SHOP_CENTER.z },
+                sortMode: 'closest',
+                limit: 500,
+                allowUnstocked: true
+            })
+        });
+        if (!resp.ok) throw new Error(`Tradex API ${resp.status}`);
+        const data = await resp.json();
+        ncShopExchanges = (data.exchanges || []).filter(e => {
+            const p = e.pos;
+            return p.x >= NC_SHOP_BOUNDS.minX && p.x <= NC_SHOP_BOUNDS.maxX &&
+                   p.z >= NC_SHOP_BOUNDS.minZ && p.z <= NC_SHOP_BOUNDS.maxZ;
+        });
+        ncShopDataReady = true;
+    } catch (err) {
+        console.error('Background Tradex fetch failed:', err);
+    }
+}
+
+function ncFindNearbyShops(prop) {
+    if (!ncShopDataReady || prop.x == null || prop.z == null) return [];
+    const grouped = {};
+    ncShopExchanges.forEach(e => {
+        const key = `${e.pos.x},${e.pos.y},${e.pos.z}`;
+        if (!grouped[key]) grouped[key] = { pos: e.pos, exchanges: [] };
+        grouped[key].exchanges.push(e);
+    });
+    return Object.values(grouped)
+        .map(g => ({ ...g, dist: Math.hypot(g.pos.x - prop.x, g.pos.z - prop.z) }))
+        .filter(g => g.dist <= NC_SHOP_LINK_RADIUS)
+        .sort((a, b) => a.dist - b.dist);
+}
 
 // ============================================
 // Mode Toggle
@@ -55,30 +100,15 @@ function ncExitShopMode() {
 // ============================================
 async function ncFetchShops() {
     const results = document.getElementById('ncShopResults');
+
+    if (ncShopDataReady && ncShopExchanges.length > 0) {
+        ncFilterShops();
+        return;
+    }
+
     results.innerHTML = '<div class="nc-shop-loading">Loading shops...</div>';
-
     try {
-        const resp = await fetch(TRADEX_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                pos: { server: 'play.civmc.net', world: 'overworld', x: NC_SHOP_CENTER.x, y: 64, z: NC_SHOP_CENTER.z },
-                sortMode: 'closest',
-                limit: 500,
-                allowUnstocked: true
-            })
-        });
-
-        if (!resp.ok) throw new Error(`Tradex API ${resp.status}`);
-        const data = await resp.json();
-
-        // Filter to NC bounds
-        ncShopExchanges = (data.exchanges || []).filter(e => {
-            const p = e.pos;
-            return p.x >= NC_SHOP_BOUNDS.minX && p.x <= NC_SHOP_BOUNDS.maxX &&
-                   p.z >= NC_SHOP_BOUNDS.minZ && p.z <= NC_SHOP_BOUNDS.maxZ;
-        });
-
+        await ncEnsureShopData();
         ncFilterShops();
     } catch (err) {
         console.error('Tradex fetch error:', err);

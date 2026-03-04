@@ -170,6 +170,70 @@ async function loadNewCallisto() {
             }
         });
 
+        // --- Shop link confirm/dismiss/unlink/restore (admin/surveyor) ---
+        if (canEdit) {
+            container.querySelectorAll('.nc-shop-link-btn').forEach(btn => {
+                btn.addEventListener('click', async (ev) => {
+                    ev.stopPropagation();
+                    const action = btn.dataset.action;
+                    const key = btn.dataset.key;
+                    const pi = parseInt(btn.dataset.pi);
+                    const prop = ncProperties[pi];
+                    if (!prop?.id) return;
+                    const [sx, sy, sz] = key.split(',').map(Number);
+                    try {
+                        const existing = prop._shopLinks.find(l => l.shop_x === sx && l.shop_y === sy && l.shop_z === sz);
+                        if (action === 'confirm') {
+                            if (existing) {
+                                await supabaseUpdate('nc_property_shops', existing.id, { dismissed: false });
+                                existing.dismissed = false;
+                            } else {
+                                const rows = await supabaseInsert('nc_property_shops', {
+                                    property_id: prop.id, shop_x: sx, shop_y: sy, shop_z: sz,
+                                    confirmed_by: currentUser?.id || null,
+                                    confirmed_by_name: userProfile?.discord_username || 'Unknown'
+                                });
+                                prop._shopLinks.push(rows?.[0] || { property_id: prop.id, shop_x: sx, shop_y: sy, shop_z: sz, dismissed: false });
+                            }
+                        } else if (action === 'dismiss') {
+                            if (existing) {
+                                await supabaseUpdate('nc_property_shops', existing.id, { dismissed: true });
+                                existing.dismissed = true;
+                            } else {
+                                const rows = await supabaseInsert('nc_property_shops', {
+                                    property_id: prop.id, shop_x: sx, shop_y: sy, shop_z: sz,
+                                    confirmed_by: currentUser?.id || null,
+                                    confirmed_by_name: userProfile?.discord_username || 'Unknown',
+                                    dismissed: true
+                                });
+                                prop._shopLinks.push(rows?.[0] || { property_id: prop.id, shop_x: sx, shop_y: sy, shop_z: sz, dismissed: true });
+                            }
+                        } else if (action === 'unlink' || action === 'restore') {
+                            if (existing?.id) {
+                                await supabaseDelete('nc_property_shops', existing.id);
+                            } else {
+                                const found = await supabaseRest('nc_property_shops',
+                                    `select=id&property_id=eq.${prop.id}&shop_x=eq.${sx}&shop_y=eq.${sy}&shop_z=eq.${sz}`);
+                                if (found?.[0]) await supabaseDelete('nc_property_shops', found[0].id);
+                            }
+                            prop._shopLinks = prop._shopLinks.filter(l => !(l.shop_x === sx && l.shop_y === sy && l.shop_z === sz));
+                        }
+                        // Refresh popup in-place
+                        const marker = ncMarkers[pi];
+                        if (marker) {
+                            marker.setPopupContent(buildPopupHTML(prop, true, pi));
+                            // Re-bind event handlers by closing and reopening
+                            const latlng = marker.getLatLng();
+                            ncMap.closePopup();
+                            setTimeout(() => marker.openPopup(), 50);
+                        }
+                    } catch (err) {
+                        console.error('Shop link action failed:', err);
+                    }
+                });
+            });
+        }
+
         // --- Log buttons (all users) ---
         const txnBtn = container.querySelector('.nc-popup-txn-btn');
         if (txnBtn) {
@@ -437,6 +501,24 @@ async function loadNewCallisto() {
         }
 
         ncProperties = props;
+
+        // Load confirmed shop links and attach to properties
+        try {
+            const links = await supabaseRest('nc_property_shops', 'select=*');
+            const linkMap = {};
+            (links || []).forEach(l => {
+                if (!linkMap[l.property_id]) linkMap[l.property_id] = [];
+                linkMap[l.property_id].push(l);
+            });
+            ncProperties.forEach(p => { p._shopLinks = linkMap[p.id] || []; });
+        } catch (e) {
+            console.error('Failed to load shop links:', e);
+            ncProperties.forEach(p => { p._shopLinks = []; });
+        }
+
+        // Background-fetch Tradex data for proximity matching
+        ncEnsureShopData();
+
         ncRefreshAll();
         const countEl = document.getElementById('ncPropsCount');
         if (countEl) countEl.textContent = `${ncProperties.length} properties`;
@@ -531,6 +613,50 @@ function buildPopupHTML(prop, canEdit, pi) {
 
     if (prop.last_surveyed) h += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
     if (prop.sale_link) h += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
+
+    // Nearby Shops section
+    const nearbyShops = ncFindNearbyShops(prop);
+    const confirmedKeys = new Set(
+        (prop._shopLinks || []).filter(l => !l.dismissed).map(l => `${l.shop_x},${l.shop_y},${l.shop_z}`)
+    );
+    const dismissedKeys = new Set(
+        (prop._shopLinks || []).filter(l => l.dismissed).map(l => `${l.shop_x},${l.shop_y},${l.shop_z}`)
+    );
+    if (nearbyShops.length > 0) {
+        const activeCount = nearbyShops.filter(s => !dismissedKeys.has(`${s.pos.x},${s.pos.y},${s.pos.z}`)).length;
+        h += `<div class="nc-popup-shops-section">`;
+        h += `<div class="nc-popup-shops-header"><span>Nearby Shops</span><span class="nc-popup-shops-count">${confirmedKeys.size} linked / ${activeCount} nearby</span></div>`;
+        h += `<div class="nc-popup-shops-list">`;
+        nearbyShops.forEach(shop => {
+            const key = `${shop.pos.x},${shop.pos.y},${shop.pos.z}`;
+            const isConfirmed = confirmedKeys.has(key);
+            const isDismissed = dismissedKeys.has(key);
+            if (isDismissed && !canEdit) return;
+            const tradeCount = shop.exchanges.length;
+            const stockedCount = shop.exchanges.filter(e => e.stock > 0).length;
+            const distStr = Math.round(shop.dist);
+            const stateClass = isConfirmed ? 'confirmed' : isDismissed ? 'dismissed' : 'suggested';
+            h += `<div class="nc-shop-link-row ${stateClass}" data-shop-key="${key}" data-pi="${pi}">`;
+            h += `<div class="nc-shop-link-info">`;
+            h += `<span class="nc-shop-link-trades">${tradeCount} trade${tradeCount !== 1 ? 's' : ''}</span>`;
+            h += `<span class="nc-shop-link-stock">${stockedCount} in stock</span>`;
+            h += `<span class="nc-shop-link-dist">${distStr}m</span>`;
+            h += `<span class="nc-shop-link-coords">${shop.pos.x}, ${shop.pos.z}</span>`;
+            h += `</div>`;
+            if (canEdit) {
+                if (isConfirmed) {
+                    h += `<button class="nc-shop-link-btn unlink" data-action="unlink" data-key="${key}" data-pi="${pi}">&#10005;</button>`;
+                } else if (isDismissed) {
+                    h += `<button class="nc-shop-link-btn restore" data-action="restore" data-key="${key}" data-pi="${pi}">&#8617;</button>`;
+                } else {
+                    h += `<button class="nc-shop-link-btn confirm" data-action="confirm" data-key="${key}" data-pi="${pi}">&#10003;</button>`;
+                    h += `<button class="nc-shop-link-btn dismiss" data-action="dismiss" data-key="${key}" data-pi="${pi}">&#10005;</button>`;
+                }
+            }
+            h += `</div>`;
+        });
+        h += `</div></div>`;
+    }
 
     // Actions
     h += `<div class="nc-popup-actions">`;

@@ -1597,6 +1597,54 @@
         }
         .nc-popup.expanded .nc-popup-extra { display: block; }
 
+        /* Nearby Shops in popup */
+        .nc-popup-shops-section {
+            margin-top: 0.5rem;
+            border-top: 1px solid rgba(184, 180, 204, 0.15);
+            padding-top: 0.4rem;
+        }
+        .nc-popup-shops-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+        }
+        .nc-popup-shops-count { font-size: 0.6rem; color: #00bcd4; }
+        .nc-popup-shops-list { max-height: 120px; overflow-y: auto; }
+        .nc-shop-link-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.2rem 0.3rem;
+            border-radius: 3px;
+            margin-bottom: 0.15rem;
+            font-size: 0.65rem;
+        }
+        .nc-shop-link-row.confirmed { background: rgba(76,175,80,0.12); border-left: 2px solid #4caf50; }
+        .nc-shop-link-row.suggested { background: rgba(0,188,212,0.08); border-left: 2px solid rgba(0,188,212,0.4); }
+        .nc-shop-link-row.dismissed { background: rgba(184,180,204,0.06); border-left: 2px solid rgba(184,180,204,0.2); opacity: 0.5; }
+        .nc-shop-link-info { display: flex; gap: 0.5rem; align-items: center; }
+        .nc-shop-link-trades { color: var(--text); font-weight: 500; }
+        .nc-shop-link-stock { color: #4caf50; }
+        .nc-shop-link-dist { color: var(--text-muted); }
+        .nc-shop-link-coords { color: var(--text-muted); font-size: 0.58rem; }
+        .nc-shop-link-btn {
+            border: none;
+            background: rgba(184,180,204,0.15);
+            color: var(--text);
+            border-radius: 3px;
+            padding: 0.15rem 0.4rem;
+            cursor: pointer;
+            font-size: 0.6rem;
+            margin-left: 0.2rem;
+        }
+        .nc-shop-link-btn.confirm { color: #4caf50; }
+        .nc-shop-link-btn.dismiss, .nc-shop-link-btn.unlink { color: #e04040; }
+        .nc-shop-link-btn.restore { color: #00bcd4; }
+        .nc-shop-link-btn:hover { background: rgba(184,180,204,0.3); }
+
         .nc-popup-actions {
             display: flex;
             gap: 0.4rem;
@@ -3354,11 +3402,11 @@
         </div>
     </div>
 
-    <script src="app.js?v=110"></script>
-    <script src="nc-map.js?v=110"></script>
-    <script src="nc-table.js?v=110"></script>
-    <script src="nc-modals.js?v=110"></script>
-    <script src="nc-shops.js?v=110"></script>
-    <script src="nc-init.js?v=110"></script>
+    <script src="app.js?v=111"></script>
+    <script src="nc-map.js?v=111"></script>
+    <script src="nc-table.js?v=111"></script>
+    <script src="nc-modals.js?v=111"></script>
+    <script src="nc-shops.js?v=111"></script>
+    <script src="nc-init.js?v=111"></script>
 </body>
 </html>
