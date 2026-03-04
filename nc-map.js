@@ -53,6 +53,7 @@ async function loadNewCallisto() {
 
     // Double-click to create new property row in spreadsheet (admin/surveyor only)
     ncMap.on('dblclick', (e) => {
+        if (ncShopMode) return;
         if (!ncCanEdit()) return;
         const mcX = Math.round(e.latlng.lng);
         const mcZ = Math.round(-e.latlng.lat);
