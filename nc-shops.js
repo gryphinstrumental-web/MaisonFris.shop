@@ -236,7 +236,7 @@ function ncRenderShopMarkers() {
     const grouped = {};
     ncShopFiltered.forEach(e => {
         const key = `${e.pos.x},${e.pos.y},${e.pos.z}`;
-        if (!grouped[key]) grouped[key] = { pos: e.pos, exchanges: [] };
+        if (!grouped[key]) grouped[key] = { pos: e.pos, exchanges: [], key: key };
         grouped[key].exchanges.push(e);
     });
 
@@ -257,9 +257,24 @@ function ncRenderShopMarkers() {
         });
 
         marker.bindPopup(ncShopPopupHTML(group.exchanges), {
-            maxWidth: 400,
-            minWidth: 280,
+            maxWidth: 500,
+            minWidth: 350,
+            autoPan: false,
             className: 'nc-leaflet-popup'
+        });
+
+        marker._ncShopKey = group.key;
+
+        // Clicking a marker → sync carousel and center
+        marker.on('popupopen', function() {
+            if (_ncShopFromCard) return;
+            const firstIdx = ncShopFiltered.findIndex(ex =>
+                `${ex.pos.x},${ex.pos.y},${ex.pos.z}` === group.key
+            );
+            if (firstIdx >= 0) {
+                ncShopHighlightCard(firstIdx);
+                ncShopCenterOnPoint(group.pos);
+            }
         });
 
         ncShopMarkers.push(marker);
@@ -297,27 +312,56 @@ function ncShopPopupHTML(exchanges) {
 // Card Selection, Zoom & Carousel
 // ============================================
 let ncShopSelectedIdx = -1;
+let _ncShopFromCard = false;
 
-function ncShopSelectCard(idx) {
+function ncShopHighlightCard(idx) {
     ncShopSelectedIdx = idx;
     const container = document.getElementById('ncShopResults');
-
-    // Highlight active card
     container.querySelectorAll('.nc-shop-card').forEach(c => c.classList.remove('active'));
     const card = container.querySelector(`.nc-shop-card[data-idx="${idx}"]`);
     if (card) {
         card.classList.add('active');
-        // Center card in carousel
         const containerRect = container.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
         const scrollOffset = card.offsetLeft - container.offsetLeft - (containerRect.width / 2) + (cardRect.width / 2);
         container.scrollTo({ left: scrollOffset, behavior: 'smooth' });
     }
+}
 
-    // Zoom map to max and center on trade location
+function ncShopCenterOnPoint(pos) {
+    const targetLatLng = L.latLng(-pos.z, pos.x);
+    const bar = document.getElementById('ncShopBar');
+    const panel = document.getElementById('ncShopPanel');
+    const barH = bar ? bar.offsetHeight : 0;
+    const panelH = panel ? panel.offsetHeight : 0;
+    const offsetPx = (barH + panelH) / 2;
+    if (offsetPx > 0) {
+        const targetPoint = ncMap.project(targetLatLng, 3);
+        const adjustedCenter = ncMap.unproject(L.point(targetPoint.x, targetPoint.y + offsetPx), 3);
+        ncMap.setView(adjustedCenter, 3, { animate: false });
+    } else {
+        ncMap.setView(targetLatLng, 3, { animate: false });
+    }
+}
+
+function ncOpenShopMarkerPopup(pos) {
+    const key = `${pos.x},${pos.y},${pos.z}`;
+    for (const marker of ncShopMarkers) {
+        if (marker._ncShopKey === key) {
+            marker.openPopup();
+            return;
+        }
+    }
+}
+
+function ncShopSelectCard(idx) {
+    ncShopHighlightCard(idx);
     const ex = ncShopFiltered[idx];
     if (ex) {
-        ncMap.setView([-ex.pos.z, ex.pos.x], 3);
+        ncShopCenterOnPoint(ex.pos);
+        _ncShopFromCard = true;
+        ncOpenShopMarkerPopup(ex.pos);
+        setTimeout(() => { _ncShopFromCard = false; }, 50);
     }
 }
 
