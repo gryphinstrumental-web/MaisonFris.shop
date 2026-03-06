@@ -121,16 +121,16 @@ function renderNCTable(properties, filter = '') {
         const histIcon = prop.historic ? '\u2705' : '\u274C';
         tr.innerHTML = `
             <td><button class="nc-table-locate" title="Show on map"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></button></td>
-            <td data-field="name"${vis('name')}>${prop.name || 'Unnamed'}</td>
-            <td data-field="address"${vis('address')}>${prop.address || ''}</td>
-            <td data-field="owner"${vis('owner')}>${prop.owner || ''}</td>
-            <td data-field="discord_contact"${vis('discord_contact')}>${prop.discord_contact || ''}</td>
-            <td data-field="hs_account"${vis('hs_account')}>${prop.hs_account || ''}</td>
+            <td data-field="name"${vis('name')}>${ncEsc(prop.name) || 'Unnamed'}</td>
+            <td data-field="address"${vis('address')}>${ncEsc(prop.address)}</td>
+            <td data-field="owner"${vis('owner')}>${ncEsc(prop.owner)}</td>
+            <td data-field="discord_contact"${vis('discord_contact')}>${ncEsc(prop.discord_contact)}</td>
+            <td data-field="hs_account"${vis('hs_account')}>${ncEsc(prop.hs_account)}</td>
             <td data-field="trust_deposit"${vis('trust_deposit')}>${(prop.type === 'Commercial') ? ((prop.trust_deposit === -1) ? '<span style="color:var(--text-muted);font-style:italic;">Waived</span>' : `<span style="color:${(prop.trust_deposit ?? 0) >= 50 ? '#4caf50' : (prop.trust_deposit ?? 0) > 0 ? '#e6a817' : '#e04040'}">${prop.trust_deposit ?? 0}d</span>`) : '<span style="color:var(--text-muted);">—</span>'}</td>
             <td data-field="appraised_value"${vis('appraised_value')}>${prop.appraised_value != null ? prop.appraised_value : ''}</td>
-            <td data-field="tenant"${vis('tenant')}>${prop.tenant || ''}</td>
-            <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${prop.type}</span>` : ''}</td>
-            <td data-field="status"${vis('status')}>${prop.status ? `<span class="nc-status-badge" style="background:${sc};">${prop.status}</span>` : ''}</td>
+            <td data-field="tenant"${vis('tenant')}>${ncEsc(prop.tenant)}</td>
+            <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${ncEsc(prop.type)}</span>` : ''}</td>
+            <td data-field="status"${vis('status')}>${prop.status ? `<span class="nc-status-badge" style="background:${sc};">${ncEsc(prop.status)}</span>` : ''}</td>
             <td data-field="signage"${vis('signage')}><span class="nc-binary-icon">${signIcon}</span></td>
             <td data-field="shopchests"${vis('shopchests')}><span class="nc-binary-icon">${shopIcon}</span></td>
             <td data-field="historic"${vis('historic')}><span class="nc-binary-icon">${histIcon}</span></td>

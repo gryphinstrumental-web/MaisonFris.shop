@@ -211,12 +211,6 @@ function ncRenderShopResults() {
     container.innerHTML = html;
 }
 
-function ncEsc(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-}
-
 function ncFormatAge(timestamp) {
     const secs = Math.floor((Date.now() - timestamp) / 1000);
     if (secs < 60) return 'just now';

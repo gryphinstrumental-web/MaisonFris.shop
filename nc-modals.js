@@ -92,11 +92,11 @@ async function ncShowSurveyorLog(prop) {
             if (log.field_changed === '_created') {
                 desc = `Property created`;
             } else if (log.field_changed === '_note') {
-                desc = `<em style="color:var(--text);">${log.new_value}</em>`;
+                desc = `<em style="color:var(--text);">${ncEsc(log.new_value)}</em>`;
             } else {
-                desc = `<strong>${field}</strong> changed`;
-                if (log.old_value) desc += ` from <span class="nc-log-old">${log.old_value}</span>`;
-                desc += ` to <span class="nc-log-new">${log.new_value || '(empty)'}</span>`;
+                desc = `<strong>${ncEsc(field)}</strong> changed`;
+                if (log.old_value) desc += ` from <span class="nc-log-old">${ncEsc(log.old_value)}</span>`;
+                desc += ` to <span class="nc-log-new">${ncEsc(log.new_value) || '(empty)'}</span>`;
             }
             let actions = '';
             if (canEdit) {
@@ -111,7 +111,7 @@ async function ncShowSurveyorLog(prop) {
                 <div class="nc-log-meta">
                     <span class="nc-log-date">${date}</span>
                     ${actions}
-                    <span class="nc-log-user">${log.changed_by_name || 'Unknown'}</span>
+                    <span class="nc-log-user">${ncEsc(log.changed_by_name) || 'Unknown'}</span>
                 </div>
                 <div class="nc-log-desc">${desc}</div>
             `;
@@ -249,13 +249,13 @@ async function ncShowTransactionLog(prop) {
             const el = document.createElement('div');
             el.className = 'nc-txn-entry';
             const date = txn.transaction_date ? new Date(txn.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-            let html = `<div class="nc-log-meta"><span class="nc-log-date">${date}</span><span class="nc-log-user">${txn.recorded_by_name || 'Unknown'}</span></div>`;
-            html += `<div class="nc-txn-detail"><span class="lbl">Seller</span> ${txn.seller || '—'}</div>`;
-            html += `<div class="nc-txn-detail"><span class="lbl">Buyer</span> ${txn.buyer || '—'}</div>`;
-            html += `<div class="nc-txn-detail"><span class="lbl">Broker</span> ${txn.broker || '—'}</div>`;
-            html += `<div class="nc-txn-detail"><span class="lbl">Amount</span> <span class="nc-txn-amount">${txn.amount != null ? txn.amount + 'd' : '—'}</span></div>`;
-            if (txn.new_name) html += `<div class="nc-txn-detail"><span class="lbl">Renamed</span> ${txn.new_name}</div>`;
-            if (txn.notes) html += `<div class="nc-txn-notes">${txn.notes}</div>`;
+            let html = `<div class="nc-log-meta"><span class="nc-log-date">${date}</span><span class="nc-log-user">${ncEsc(txn.recorded_by_name) || 'Unknown'}</span></div>`;
+            html += `<div class="nc-txn-detail"><span class="lbl">Seller</span> ${ncEsc(txn.seller) || '—'}</div>`;
+            html += `<div class="nc-txn-detail"><span class="lbl">Buyer</span> ${ncEsc(txn.buyer) || '—'}</div>`;
+            html += `<div class="nc-txn-detail"><span class="lbl">Broker</span> ${ncEsc(txn.broker) || '—'}</div>`;
+            html += `<div class="nc-txn-detail"><span class="lbl">Amount</span> <span class="nc-txn-amount">${txn.amount != null ? ncEsc(txn.amount) + 'd' : '—'}</span></div>`;
+            if (txn.new_name) html += `<div class="nc-txn-detail"><span class="lbl">Renamed</span> ${ncEsc(txn.new_name)}</div>`;
+            if (txn.notes) html += `<div class="nc-txn-notes">${ncEsc(txn.notes)}</div>`;
             if (canEdit) {
                 html += `<div class="nc-txn-actions">`;
                 html += `<button class="nc-txn-edit-btn" data-txn-id="${txn.id}">Edit</button>`;
@@ -448,14 +448,14 @@ async function ncShowFineLog(prop) {
             el.className = 'nc-txn-entry';
             const date = fine.issued_at ? new Date(fine.issued_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
             const statusClass = fine.status || 'pending';
-            let html = `<div class="nc-log-meta"><span class="nc-log-date">${date}</span> <span class="nc-fine-status ${statusClass}">${fine.status || 'pending'}</span><span class="nc-log-user">${fine.issued_by_name || ''}</span></div>`;
-            html += `<div class="nc-txn-detail"><span class="lbl">Amount</span> <span style="color:#d4a0a0;font-weight:500;">${fine.amount}d</span></div>`;
-            if (fine.reason) html += `<div class="nc-txn-detail"><span class="lbl">Reason</span> ${fine.reason}</div>`;
+            let html = `<div class="nc-log-meta"><span class="nc-log-date">${date}</span> <span class="nc-fine-status ${ncEsc(statusClass)}">${ncEsc(fine.status) || 'pending'}</span><span class="nc-log-user">${ncEsc(fine.issued_by_name)}</span></div>`;
+            html += `<div class="nc-txn-detail"><span class="lbl">Amount</span> <span style="color:#d4a0a0;font-weight:500;">${ncEsc(fine.amount)}d</span></div>`;
+            if (fine.reason) html += `<div class="nc-txn-detail"><span class="lbl">Reason</span> ${ncEsc(fine.reason)}</div>`;
             if (fine.reporter) {
-                html += `<div class="nc-txn-detail"><span class="lbl">Reporter</span> ${fine.reporter}</div>`;
-                if (fine.bounty_amount) html += `<div class="nc-fine-bounty">Bounty: ${fine.bounty_amount}d</div>`;
+                html += `<div class="nc-txn-detail"><span class="lbl">Reporter</span> ${ncEsc(fine.reporter)}</div>`;
+                if (fine.bounty_amount) html += `<div class="nc-fine-bounty">Bounty: ${ncEsc(fine.bounty_amount)}d</div>`;
             }
-            if (fine.notes) html += `<div class="nc-txn-notes">${fine.notes}</div>`;
+            if (fine.notes) html += `<div class="nc-txn-notes">${ncEsc(fine.notes)}</div>`;
             if (canEdit) {
                 html += `<div class="nc-txn-actions">`;
                 html += `<button class="nc-txn-edit-btn nc-fine-edit" data-fine-id="${fine.id}">Edit</button>`;

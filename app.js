@@ -20,6 +20,25 @@ let adminViewMode = true; // true = admin editing, false = client preview
 let userProfile = null;
 
 // ============================================
+// Security Utilities
+// ============================================
+function ncEsc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function sanitizeUrl(url) {
+    if (!url) return '';
+    try {
+        const u = new URL(url);
+        if (u.protocol === 'http:' || u.protocol === 'https:') return url;
+    } catch {}
+    return '';
+}
+
+// ============================================
 // Direct REST helpers (fully bypass Supabase JS client for data)
 // ============================================
 function restHeaders() {
@@ -161,8 +180,8 @@ async function checkAdmin() {
 function updateAuthUI() {
     const authBar = document.getElementById('authBar');
     if (currentUser) {
-        const name = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'User';
-        const avatar = currentUser.user_metadata?.avatar_url;
+        const name = ncEsc(currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'User');
+        const avatar = sanitizeUrl(currentUser.user_metadata?.avatar_url);
         authBar.innerHTML = `
             <div class="user-info">
                 ${avatar ? `<img src="${avatar}" alt="">` : ''}
@@ -247,14 +266,14 @@ function renderAdminUsers(filter) {
     filtered.forEach(p => {
         const row = document.createElement('div');
         row.className = 'admin-user-row';
-        const avatarUrl = p.discord_avatar || '';
+        const avatarUrl = sanitizeUrl(p.discord_avatar);
         const isSurveyor = !!p.is_surveyor;
         const isPAdmin = !!p.is_admin;
         row.innerHTML = `
             ${avatarUrl ? `<img class="admin-user-avatar" src="${avatarUrl}" alt="">` : `<div class="admin-user-avatar" style="background:rgba(184,180,204,0.2);"></div>`}
             <div class="admin-user-info">
-                <div class="admin-user-name">${p.discord_username || 'Unknown'}</div>
-                ${p.minecraft_ign ? `<div class="admin-user-ign">${p.minecraft_ign}</div>` : ''}
+                <div class="admin-user-name">${ncEsc(p.discord_username || 'Unknown')}</div>
+                ${p.minecraft_ign ? `<div class="admin-user-ign">${ncEsc(p.minecraft_ign)}</div>` : ''}
             </div>
             <button class="admin-role-btn ${isSurveyor ? 'active' : ''}" data-role="surveyor" data-uid="${p.id}" title="Toggle surveyor">Surveyor</button>
             <button class="admin-role-btn admin-btn ${isPAdmin ? 'active' : ''}" data-role="admin" data-uid="${p.id}" title="Toggle admin">Admin</button>
@@ -281,7 +300,7 @@ function renderAdminUsers(filter) {
             const btn = e.currentTarget;
             const newVal = !isPAdmin;
             const action = newVal ? 'grant admin to' : 'revoke admin from';
-            if (!confirm(`Are you sure you want to ${action} ${p.discord_username}?`)) return;
+            if (!confirm(`Are you sure you want to ${action} ${p.discord_username || 'this user'}?`)) return;
             btn.textContent = '...';
             try {
                 await fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${p.id}`, {
@@ -394,9 +413,9 @@ async function loadOrderHistory() {
                 month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
             });
             const total = (Number(order.price) * order.quantity).toFixed(2);
-            const ticker = order.equities?.ticker || 'Unknown';
-            const company = order.equities?.company_name || '';
-            const discordUser = order.profiles?.discord_username || '';
+            const ticker = ncEsc(order.equities?.ticker || 'Unknown');
+            const company = ncEsc(order.equities?.company_name || '');
+            const discordUser = ncEsc(order.profiles?.discord_username || '');
 
             const searchStr = [
                 ticker, company, order.side, order.status,
@@ -429,7 +448,7 @@ async function loadOrderHistory() {
                     </div>
                     <div class="oh-row oh-meta">
                         ${isAdmin && discordUser ? `<span>${discordUser}</span>` : ''}
-                        ${order.minecraft_ign ? `<span>IGN: ${order.minecraft_ign}</span>` : ''}
+                        ${order.minecraft_ign ? `<span>IGN: ${ncEsc(order.minecraft_ign)}</span>` : ''}
                         <span>${date}</span>
                     </div>
                     ${adminHTML}

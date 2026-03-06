@@ -546,8 +546,9 @@ function buildPopupHTML(prop, canEdit, pi) {
     let h = `<div class="nc-popup" data-pi="${pi}">`;
 
     // Image
-    if (prop.image_url) {
-        h += `<div class="nc-popup-img-wrap"><img src="${prop.image_url}" alt="">`;
+    const safeImgUrl = sanitizeUrl(prop.image_url);
+    if (safeImgUrl) {
+        h += `<div class="nc-popup-img-wrap"><img src="${safeImgUrl}" alt="">`;
         if (canEdit) h += `<div class="nc-popup-img-actions"><button class="nc-popup-img-action nc-popup-img-change" title="Change image">&#x270E;</button><button class="nc-popup-img-action nc-popup-img-remove" title="Remove image">&times;</button></div>`;
         h += `</div>`;
     } else if (canEdit) {
@@ -557,9 +558,9 @@ function buildPopupHTML(prop, canEdit, pi) {
     // Title
     h += `<div class="nc-popup-body">`;
     if (canEdit) {
-        h += `<h3 class="nc-popup-editable" data-pi="${pi}" data-field="name" title="Click to edit">${prop.name || 'Unnamed Property'}</h3>`;
+        h += `<h3 class="nc-popup-editable" data-pi="${pi}" data-field="name" title="Click to edit">${ncEsc(prop.name) || 'Unnamed Property'}</h3>`;
     } else {
-        h += `<h3 class="nc-popup-copyable" data-copy="${esc(prop.name)}" title="Click to copy">${prop.name || 'Unnamed Property'}</h3>`;
+        h += `<h3 class="nc-popup-copyable" data-copy="${esc(prop.name)}" title="Click to copy">${ncEsc(prop.name) || 'Unnamed Property'}</h3>`;
     }
 
     // Type + Status badges
@@ -583,13 +584,13 @@ function buildPopupHTML(prop, canEdit, pi) {
 
     // Details
     if (canEdit) {
-        h += `<div class="nc-prop-detail"><span>Address</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="address" title="Click to edit">${prop.address || ''}</span></div>`;
+        h += `<div class="nc-prop-detail"><span>Address</span><span class="value nc-popup-editable" data-pi="${pi}" data-field="address" title="Click to edit">${ncEsc(prop.address)}</span></div>`;
     } else if (prop.address) {
-        h += `<div class="nc-prop-detail"><span>Address</span><span class="value">${prop.address}</span></div>`;
+        h += `<div class="nc-prop-detail"><span>Address</span><span class="value">${ncEsc(prop.address)}</span></div>`;
     }
-    if (prop.owner) h += `<div class="nc-prop-detail"><span>Owner</span><span class="value nc-popup-copyable" data-copy="${esc(prop.owner)}" title="Click to copy">${prop.owner}</span></div>`;
-    if (prop.tenant) h += `<div class="nc-prop-detail"><span>Tenant</span><span class="value">${prop.tenant}</span></div>`;
-    if (prop.discord_contact) h += `<div class="nc-prop-detail"><span>Discord</span><span class="value nc-popup-copyable" data-copy="${esc(prop.discord_contact)}" title="Click to copy">${prop.discord_contact}</span></div>`;
+    if (prop.owner) h += `<div class="nc-prop-detail"><span>Owner</span><span class="value nc-popup-copyable" data-copy="${esc(prop.owner)}" title="Click to copy">${ncEsc(prop.owner)}</span></div>`;
+    if (prop.tenant) h += `<div class="nc-prop-detail"><span>Tenant</span><span class="value">${ncEsc(prop.tenant)}</span></div>`;
+    if (prop.discord_contact) h += `<div class="nc-prop-detail"><span>Discord</span><span class="value nc-popup-copyable" data-copy="${esc(prop.discord_contact)}" title="Click to copy">${ncEsc(prop.discord_contact)}</span></div>`;
     h += `<div class="nc-prop-detail"><span>Coords</span><span class="value nc-coords-copy" data-coords="${prop.x}, ${prop.z}" title="Click to copy">${prop.x}, ${prop.z}</span></div>`;
     if (prop.appraised_value) h += `<div class="nc-prop-detail"><span>Value</span><span class="value">${prop.appraised_value}d</span></div>`;
 
@@ -612,7 +613,8 @@ function buildPopupHTML(prop, canEdit, pi) {
     h += `<div class="nc-prop-detail"><span>Protected</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="historic">${prop.historic ? '\u2705' : '\u274C'}</span></div>`;
 
     if (prop.last_surveyed) h += `<div class="nc-prop-detail"><span>Surveyed</span><span class="value">${fmtDate(prop.last_surveyed)}</span></div>`;
-    if (prop.sale_link) h += `<div style="margin-top: 0.3rem;"><a href="${prop.sale_link}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
+    const safeSaleLink = sanitizeUrl(prop.sale_link);
+    if (safeSaleLink) h += `<div style="margin-top: 0.3rem;"><a href="${safeSaleLink}" target="_blank" rel="noopener" style="color: #a8d4a0; font-size: 0.8rem; text-decoration: none; border-bottom: 1px solid rgba(168,212,160,0.3);">View Listing</a></div>`;
 
     // Nearby Shops section
     const nearbyShops = ncFindNearbyShops(prop);
@@ -740,16 +742,16 @@ function renderNCPanel(properties) {
         const sc = NC_STATUS_COLORS[prop.status] || '';
         card.innerHTML = `
             <div class="nc-panel-card-top">
-                <div class="nc-panel-card-name">${prop.name || 'Unnamed'}</div>
+                <div class="nc-panel-card-name">${ncEsc(prop.name) || 'Unnamed'}</div>
                 <span class="nc-panel-card-coords">${prop.x}, ${prop.z}</span>
             </div>
             <div class="nc-panel-card-mid">
-                ${prop.type ? `<span class="nc-panel-card-type" style="background:${tc};">${prop.type}</span>` : ''}
-                ${prop.status ? `<span class="nc-panel-card-status" style="background:${sc};">${prop.status}</span>` : ''}
+                ${prop.type ? `<span class="nc-panel-card-type" style="background:${tc};">${ncEsc(prop.type)}</span>` : ''}
+                ${prop.status ? `<span class="nc-panel-card-status" style="background:${sc};">${ncEsc(prop.status)}</span>` : ''}
             </div>
             <div class="nc-panel-card-bottom">
-                <div class="nc-panel-card-addr">${prop.address || ''}</div>
-                ${prop.owner ? `<span class="nc-panel-card-owner">${prop.owner}</span>` : ''}
+                <div class="nc-panel-card-addr">${ncEsc(prop.address)}</div>
+                ${prop.owner ? `<span class="nc-panel-card-owner">${ncEsc(prop.owner)}</span>` : ''}
             </div>
         `;
         card.addEventListener('click', () => highlightNCProperty(i, card));
