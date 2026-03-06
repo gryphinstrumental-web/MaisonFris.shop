@@ -5,8 +5,7 @@
 const CONFIG = {
     supabaseUrl: 'https://ubuypxqueqxvugstmtkx.supabase.co',
     supabaseKey: 'sb_publishable_ndTGBxW3c2bOdMzgOVvy7w_9py3MLUs',
-    workerUrl: 'https://maisonfris-auth.maisonfris.workers.dev',
-    discordWebhook: 'https://discord.com/api/webhooks/1472730251372003474/aWcIylD6Ew7gOI1KyCLToj8aQfd7hsDJ8YqUdxniBmxSFaa_YwGAQKqwZH-gQEPLUv7Y'
+    workerUrl: 'https://maisonfris-auth.maisonfris.workers.dev'
 };
 
 // Supabase client — used ONLY for real-time subscriptions (auth handled by Worker)
@@ -808,31 +807,6 @@ document.getElementById('orderForm').addEventListener('submit', async (e) => {
             }).catch(err => console.warn('Profile update failed:', err));
             userProfile = { ...userProfile, ...profileUpdates };
         }
-
-        fetch(CONFIG.discordWebhook, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                embeds: [{
-                    title: `New ${currentOrder.type} Order - ${currentOrder.ticker}`,
-                    color: currentOrder.type === 'BUY' ? 0xa8d4a0 : 0xd4a0a0,
-                    fields: [
-                        { name: 'Order ID', value: `#${order.id}`, inline: true },
-                        { name: 'Ticker', value: currentOrder.ticker, inline: true },
-                        { name: 'Type', value: currentOrder.type, inline: true },
-                        { name: 'Price per Share', value: `$${currentOrder.selectedTier.price}`, inline: true },
-                        { name: 'Quantity', value: quantity, inline: true },
-                        { name: 'Total Value', value: `$${total}`, inline: true },
-                        { name: 'Discord', value: discordName, inline: true },
-                        { name: 'Minecraft IGN', value: ign || 'Not set', inline: true },
-                        { name: 'Nation', value: nation || 'Not set', inline: true },
-                        { name: 'Monument Bank', value: mbAccount || 'Not set', inline: true }
-                    ],
-                    timestamp: new Date().toISOString(),
-                    footer: { text: 'Pavian Exchange — Approve in Supabase dashboard' }
-                }]
-            })
-        }).catch(err => console.warn('Discord webhook failed:', err));
 
         alert('Order Sent. Maison Fris will be in touch.');
         orderModal.classList.remove('active');
