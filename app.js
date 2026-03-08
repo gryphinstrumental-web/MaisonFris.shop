@@ -26,7 +26,7 @@ function ncEsc(s) {
     if (s == null) return '';
     const d = document.createElement('div');
     d.textContent = String(s);
-    return d.innerHTML;
+    return d.innerHTML.replace(/'/g, '&#39;');
 }
 
 function sanitizeUrl(url) {
@@ -139,7 +139,7 @@ function navigate() {
     } else if (path === '/new-callisto') {
         document.getElementById('newCallistoView').classList.add('active');
         document.body.classList.remove('landing');
-        setTimeout(() => loadNewCallisto(), 100);
+        setTimeout(() => { loadNewCallisto().then(() => { if (!ncShopMode) ncEnterShopMode(); }); }, 100);
     } else if (path === '/usermanagement') {
         if (!currentUser || !isAdmin) {
             history.replaceState(null, '', '/home');
@@ -150,6 +150,20 @@ function navigate() {
         document.getElementById('userMgmtView').classList.add('active');
         document.body.classList.remove('landing');
         loadAdminUsers();
+    } else if (path === '/terminal') {
+        document.getElementById('terminalView').classList.add('active');
+        document.body.classList.remove('landing');
+        if (typeof loadTerminal === 'function') loadTerminal();
+    } else if (path === '/terminal-admin') {
+        if (!currentUser || !isAdmin) {
+            history.replaceState(null, '', '/home');
+            document.getElementById('landingView').classList.add('active');
+            document.body.classList.add('landing');
+            return;
+        }
+        document.getElementById('terminalAdminView').classList.add('active');
+        document.body.classList.remove('landing');
+        if (typeof loadTerminalAdmin === 'function') loadTerminalAdmin();
     } else if (path === '/home') {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
@@ -214,6 +228,10 @@ function updateAuthUI() {
     // Show/hide admin user management nav link
     const userMgmtLink = document.getElementById('userMgmtLink');
     if (userMgmtLink) userMgmtLink.style.display = isAdmin ? '' : 'none';
+
+    // Show/hide terminal admin nav link (admin only)
+    const terminalAdminLink = document.getElementById('terminalAdminLink');
+    if (terminalAdminLink) terminalAdminLink.style.display = isAdmin ? '' : 'none';
 }
 
 function toggleAdminView() {
@@ -269,6 +287,7 @@ function renderAdminUsers(filter) {
         const avatarUrl = sanitizeUrl(p.discord_avatar);
         const isSurveyor = !!p.is_surveyor;
         const isPAdmin = !!p.is_admin;
+        const isTerminal = !!p.terminal;
         row.innerHTML = `
             ${avatarUrl ? `<img class="admin-user-avatar" src="${avatarUrl}" alt="">` : `<div class="admin-user-avatar" style="background:rgba(184,180,204,0.2);"></div>`}
             <div class="admin-user-info">
@@ -276,6 +295,7 @@ function renderAdminUsers(filter) {
                 ${p.minecraft_ign ? `<div class="admin-user-ign">${ncEsc(p.minecraft_ign)}</div>` : ''}
             </div>
             <button class="admin-role-btn ${isSurveyor ? 'active' : ''}" data-role="surveyor" data-uid="${p.id}" title="Toggle surveyor">Surveyor</button>
+            <button class="admin-role-btn terminal-btn ${isTerminal ? 'active' : ''}" data-role="terminal" data-uid="${p.id}" title="Toggle terminal">Terminal</button>
             <button class="admin-role-btn admin-btn ${isPAdmin ? 'active' : ''}" data-role="admin" data-uid="${p.id}" title="Toggle admin">Admin</button>
         `;
         // Surveyor toggle
@@ -293,6 +313,23 @@ function renderAdminUsers(filter) {
                 console.error('Toggle surveyor failed:', err);
                 alert('Failed to update role: ' + err.message);
                 btn.textContent = 'Surveyor';
+            }
+        });
+        // Terminal toggle
+        row.querySelector('[data-role="terminal"]').addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            const newVal = !isTerminal;
+            btn.textContent = '...';
+            try {
+                await fetch(`${CONFIG.supabaseUrl}/rest/v1/profiles?id=eq.${p.id}`, {
+                    method: 'PATCH', headers: restHeaders(), body: JSON.stringify({ terminal: newVal })
+                });
+                p.terminal = newVal;
+                renderAdminUsers(document.getElementById('adminUsersSearch').value);
+            } catch (err) {
+                console.error('Toggle terminal failed:', err);
+                alert('Failed to update role: ' + err.message);
+                btn.textContent = 'Terminal';
             }
         });
         // Admin toggle
@@ -459,7 +496,7 @@ async function loadOrderHistory() {
 
     } catch (error) {
         console.error('Error loading order history:', error);
-        container.innerHTML = `<p class="loading">Error loading orders: ${error.message}</p>`;
+        container.innerHTML = `<p class="loading">Error loading orders: ${ncEsc(error.message)}</p>`;
     }
 }
 
@@ -640,7 +677,7 @@ async function loadEquities() {
 
     } catch (error) {
         console.error('Error loading equities:', error);
-        equityData.innerHTML = `<p class="loading">Error loading equities: ${error.message}</p>`;
+        equityData.innerHTML = `<p class="loading">Error loading equities: ${ncEsc(error.message)}</p>`;
     }
 }
 

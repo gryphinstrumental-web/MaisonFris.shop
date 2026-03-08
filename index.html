@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maíson Fris — Luxury and Customs</title>
     <meta name="description" content="Maison Fris — Luxury and Customs on CivMC">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; img-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co https://cdn.discordapp.com data: blob:; connect-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co wss://ubuypxqueqxvugstmtkx.supabase.co https://maisonfris-auth.maisonfris.workers.dev https://api.tradex.civinfo.net https://raw.githubusercontent.com;">
     <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="pragma" content="no-cache">
     <link rel="icon" type="image/png" href="2.png">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.98.0/dist/umd/supabase.min.js" integrity="sha384-Sm2s7OXxsAMTyJ4iIyRBgVpeGUvMPk2lRQnnZhE78Wej7oggIoolKt+SCt0XJbUB" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Raleway:wght@300;400;500&display=swap');
 
@@ -779,6 +780,11 @@
             background: rgba(212, 160, 160, 0.15);
             border-color: rgba(212, 160, 160, 0.4);
             color: #d4a0a0;
+        }
+        .admin-role-btn.terminal-btn.active {
+            background: rgba(212, 200, 160, 0.15);
+            border-color: rgba(212, 200, 160, 0.4);
+            color: #d4c8a0;
         }
 
         .admin-edit-btn {
@@ -3238,6 +3244,635 @@
             .nc-panel { max-height: 95px; }
             .nc-panel-card { flex: 0 0 170px; }
         }
+
+        /* ====== Terminal Page ====== */
+        .terminal-container {
+            max-width: 950px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            animation: fadeIn 1.5s ease;
+        }
+        .terminal-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .terminal-logo {
+            width: 100px;
+            opacity: 0.85;
+            margin-bottom: 0.5rem;
+        }
+        .terminal-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            font-weight: 300;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--text);
+            margin: 0;
+        }
+        .terminal-subtitle {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+        .terminal-tools {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+        .terminal-tool-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(184, 180, 204, 0.12);
+            border-radius: 10px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .terminal-ribbon {
+            position: absolute;
+            top: 24px;
+            right: -34px;
+            width: 140px;
+            text-align: center;
+            background: rgba(212,200,160,0.12);
+            color: rgba(212,200,160,0.6);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 4px 0;
+            transform: rotate(45deg);
+            white-space: nowrap;
+        }
+        .terminal-tool-card:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(184, 180, 204, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        .terminal-tool-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+            opacity: 0.8;
+        }
+        .terminal-tool-card h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            margin: 0 0 0.4rem 0;
+            color: var(--text);
+        }
+        .terminal-tool-card p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.4;
+        }
+        .terminal-tool-disabled {
+            opacity: 0.45;
+            cursor: default !important;
+        }
+        .terminal-tool-disabled:hover {
+            transform: none !important;
+            border-color: rgba(184,180,204,0.12) !important;
+        }
+        .terminal-get-btn-wrap {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(50vh - 200px);
+        }
+        .terminal-get-btn {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            padding: 0.7rem 2.5rem;
+            background: linear-gradient(135deg, rgba(212,200,160,0.15), rgba(212,200,160,0.08));
+            border: 1px solid rgba(212,200,160,0.4);
+            border-radius: 6px;
+            color: #d4c8a0;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .terminal-get-btn:hover {
+            background: linear-gradient(135deg, rgba(212,200,160,0.25), rgba(212,200,160,0.14));
+            border-color: rgba(212,200,160,0.6);
+            box-shadow: 0 0 16px rgba(212,200,160,0.12);
+        }
+        .terminal-panel {
+            animation: fadeIn 0.5s ease;
+        }
+        .terminal-panel-top {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .terminal-back-btn,
+        .terminal-refresh-btn {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.25);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        .terminal-back-btn:hover,
+        .terminal-refresh-btn:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: rgba(184, 180, 204, 0.1);
+        }
+        .terminal-arb-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+        .terminal-arb-table th {
+            text-align: left;
+            padding: 0.5rem 0.6rem;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+            white-space: nowrap;
+        }
+        .terminal-arb-table td {
+            padding: 0.55rem 0.6rem;
+            border-bottom: 1px solid rgba(184, 180, 204, 0.06);
+            color: var(--text);
+            vertical-align: top;
+        }
+        .terminal-arb-table tr:hover td {
+            background: rgba(255,255,255,0.03);
+        }
+        .terminal-arb-coords {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            opacity: 0.8;
+        }
+        .terminal-arb-city {
+            font-weight: 500;
+        }
+        .terminal-arb-profit {
+            color: #a8d4a0;
+            font-weight: 500;
+        }
+        .terminal-row-clickable {
+            cursor: pointer;
+        }
+        .terminal-row-clickable:hover td {
+            background: rgba(255,255,255,0.03);
+        }
+        .terminal-trade-popup {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.2s;
+        }
+        .terminal-trade-popup-inner {
+            background: #2a2640;
+            border: 1px solid rgba(184,180,204,0.2);
+            border-radius: 10px;
+            padding: 1.5rem 2rem;
+            max-width: 520px;
+            width: 90%;
+            position: relative;
+            color: var(--text);
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.82rem;
+            line-height: 1.7;
+        }
+        .terminal-trade-popup-inner h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin: 0 0 1rem;
+            color: var(--text);
+        }
+        .terminal-trade-popup-inner p {
+            margin: 0.6rem 0;
+        }
+        .terminal-trade-popup-inner strong {
+            color: #d4c8a0;
+        }
+        .terminal-trade-popup-close {
+            position: absolute;
+            top: 0.6rem; right: 0.8rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+        .terminal-trade-popup-close:hover {
+            color: var(--text);
+        }
+        .terminal-trade-popup .terminal-clickable-coords {
+            color: #a8d4a0;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+        }
+        .terminal-row-blurred td {
+            filter: blur(5px);
+            user-select: none;
+            pointer-events: none;
+        }
+        .terminal-upsell {
+            text-align: center;
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            color: #d4c8a0;
+            padding: 1.5rem 0;
+            letter-spacing: 0.05em;
+        }
+        .terminal-arb-pct {
+            color: #d4c8a0;
+            font-size: 0.65rem;
+        }
+        .terminal-fresh-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-right: 0.3rem;
+            vertical-align: middle;
+        }
+        .terminal-fresh-dot.fresh { background: #a8d4a0; }
+        .terminal-fresh-dot.aging { background: #d4c8a0; }
+        .terminal-fresh-dot.stale { background: #d4a0a0; }
+        .terminal-ticker {
+            overflow: hidden;
+            width: 100%;
+            margin-bottom: 0.75rem;
+            border-top: 1px solid rgba(184, 180, 204, 0.1);
+            border-bottom: 1px solid rgba(184, 180, 204, 0.1);
+            padding: 0.5rem 0;
+        }
+        .terminal-ticker-track {
+            display: flex;
+            gap: 1.5rem;
+            white-space: nowrap;
+            animation: terminalScroll 80s linear infinite;
+            width: max-content;
+        }
+        .terminal-ticker-item {
+            font-size: 0.7rem;
+            flex-shrink: 0;
+        }
+        .terminal-ticker:hover .terminal-ticker-track {
+            animation-play-state: paused;
+        }
+        @keyframes terminalScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .terminal-loading {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            letter-spacing: 0.1em;
+        }
+        .terminal-arb-wrap {
+            overflow-x: auto;
+        }
+        .terminal-filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0;
+        }
+        .terminal-filter-select,
+        .terminal-filter-input {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            color: var(--text);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            padding: 0.35rem 0.6rem;
+        }
+        .terminal-filter-select:focus,
+        .terminal-filter-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .terminal-filter-select option {
+            background: #5a5a80;
+        }
+        .terminal-filter-input {
+            width: 140px;
+        }
+        .terminal-filter-input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+        .terminal-filter-toggle {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            padding: 0.35rem 0.6rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .terminal-filter-toggle:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        .terminal-filter-toggle.active {
+            background: rgba(168, 212, 160, 0.15);
+            border-color: rgba(168, 212, 160, 0.4);
+            color: #a8d4a0;
+        }
+        .term-admin-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .term-admin-tab {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px;
+            padding: 0.45rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .term-admin-tab:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        .term-admin-tab.active {
+            background: rgba(212, 200, 160, 0.15);
+            border-color: rgba(212, 200, 160, 0.4);
+            color: #d4c8a0;
+        }
+        .term-admin-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.65rem 0.8rem;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(184, 180, 204, 0.1);
+            transition: background 0.15s;
+        }
+        .term-admin-row:hover {
+            background: rgba(255,255,255,0.08);
+        }
+        .term-admin-row-info {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.75rem;
+        }
+        .term-admin-row-meta {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+        .term-admin-row-reason {
+            font-size: 0.7rem;
+            color: #d4a0a0;
+            margin-top: 0.2rem;
+            font-style: italic;
+        }
+        .term-admin-status-select option {
+            background: #2a2640;
+            color: var(--text);
+        }
+        .term-admin-delete {
+            background: none;
+            border: 1px solid rgba(212, 160, 160, 0.25);
+            color: var(--text-muted);
+            font-size: 0.6rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .term-admin-delete:hover {
+            border-color: #d4a0a0;
+            color: #d4a0a0;
+        }
+        .terminal-sort-th {
+            cursor: pointer;
+            user-select: none;
+        }
+        .terminal-sort-th:hover {
+            color: var(--text);
+        }
+        .terminal-clickable-coords {
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+        .terminal-clickable-coords:hover {
+            color: var(--text);
+            text-decoration: underline;
+        }
+        .terminal-col-filter-row th {
+            padding: 0 0.2rem 0.3rem;
+        }
+        .terminal-col-filter {
+            width: 100%;
+            min-width: 50px;
+            padding: 0.15rem 0.3rem;
+            font-size: 0.6rem;
+            font-family: 'Raleway', sans-serif;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(184,180,204,0.15);
+            border-radius: 3px;
+            color: var(--text);
+            outline: none;
+        }
+        .terminal-col-filter:focus {
+            border-color: rgba(184,180,204,0.35);
+        }
+        .terminal-rural {
+            font-size: 0.6rem;
+            color: #c4a05a;
+            font-style: italic;
+        }
+        .terminal-consult-wrap {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .terminal-consult-disclaimer {
+            text-align: center;
+            font-size: 0.72rem;
+            font-style: italic;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        .terminal-consult-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+        .terminal-consult-form label {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 0.15rem;
+        }
+        .terminal-consult-form input,
+        .terminal-consult-form select,
+        .terminal-consult-form textarea {
+            width: 100%;
+            padding: 0.5rem 0.6rem;
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.8rem;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(184,180,204,0.2);
+            border-radius: 6px;
+            color: var(--text);
+            outline: none;
+            box-sizing: border-box;
+        }
+        .terminal-consult-form select option {
+            background: #2a2640;
+            color: var(--text);
+        }
+        .terminal-consult-form input:focus,
+        .terminal-consult-form select:focus,
+        .terminal-consult-form textarea:focus {
+            border-color: rgba(184,180,204,0.4);
+        }
+        .terminal-consult-form textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .terminal-consult-submit {
+            font-family: 'Raleway', sans-serif;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            padding: 0.6rem 1.5rem;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(184,180,204,0.25);
+            border-radius: 6px;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            align-self: center;
+        }
+        .terminal-consult-submit:hover {
+            background: rgba(255,255,255,0.14);
+            border-color: rgba(184,180,204,0.4);
+        }
+        .terminal-consult-submit:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+        .terminal-consult-history {
+            margin-top: 2rem;
+            border-top: 1px solid rgba(184,180,204,0.12);
+            padding-top: 1rem;
+        }
+        .terminal-consult-history h4 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.95rem;
+            font-weight: 400;
+            letter-spacing: 0.08em;
+            color: var(--text);
+            margin: 0 0 0.8rem 0;
+        }
+        .terminal-consult-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.6rem;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(184,180,204,0.08);
+            border-radius: 6px;
+            margin-bottom: 0.4rem;
+            font-size: 0.75rem;
+        }
+        .terminal-consult-status {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .terminal-consult-status.pending { background: rgba(212,200,160,0.2); color: #d4c8a0; }
+        .terminal-consult-status.confirmed { background: rgba(76,175,80,0.2); color: #4caf50; }
+        .terminal-consult-status.completed { background: rgba(184,180,204,0.15); color: var(--text-muted); }
+        .terminal-consult-status.cancelled { background: rgba(224,64,64,0.15); color: #e04040; }
+        .terminal-copy-flash {
+            font-size: 0.6rem;
+            color: #a8d4a0;
+            opacity: 0;
+            transition: opacity 0.3s;
+            margin-left: 0.3rem;
+        }
+        .terminal-flag-btn {
+            background: none;
+            border: 1px solid rgba(184, 180, 204, 0.15);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            opacity: 0.5;
+        }
+        .terminal-flag-btn:hover {
+            opacity: 1;
+            border-color: #d4a0a0;
+            color: #d4a0a0;
+        }
+        .terminal-flag-btn.flagged {
+            opacity: 1;
+            color: #d4a0a0;
+            border-color: rgba(212, 160, 160, 0.4);
+            background: rgba(212, 160, 160, 0.1);
+        }
+        @media (max-width: 600px) {
+            .terminal-container { padding: 1.5rem 1rem; }
+            .terminal-arb-table { font-size: 0.65rem; }
+            .terminal-arb-table th,
+            .terminal-arb-table td { padding: 0.4rem; }
+        }
     </style>
 </head>
 <body>
@@ -3252,12 +3887,14 @@
     <div class="side-menu" id="sideMenu">
         <nav>
             <a href="/home" onclick="navigateTo('/home'); return false;">Home</a>
+            <a href="/terminal" onclick="navigateTo('/terminal'); return false;">Terminal</a>
             <a href="/new-callisto" onclick="navigateTo('/new-callisto'); return false;">New Callisto</a>
             <!-- Orderbook hidden — Monument Bank exchange is now primary -->
             <!-- <a href="/orderbook" onclick="navigateTo('/orderbook'); return false;">Orderbook</a> -->
             <!-- <a href="/orderhistory" id="orderHistoryLink" onclick="navigateTo('/orderhistory'); return false;" style="display:none;">Order History</a> -->
             <a href="/profile" id="profileLink" onclick="navigateTo('/profile'); return false;" style="display:none;">Profile</a>
             <a href="/usermanagement" id="userMgmtLink" onclick="navigateTo('/usermanagement'); return false;" style="display:none;">User Management</a>
+            <a href="/terminal-admin" id="terminalAdminLink" onclick="navigateTo('/terminal-admin'); return false;" style="display:none;">Terminal Management</a>
         </nav>
         <div class="auth-bar" id="authBar">
             <button class="login-btn" id="loginBtn" onclick="loginWithDiscord()">Sign in</button>
@@ -3341,6 +3978,42 @@
                 <input type="text" class="um-search" id="adminUsersSearch" placeholder="Search by username or IGN...">
             </div>
             <div class="um-list" id="adminUsersList"></div>
+        </div>
+    </div>
+
+    <!-- Terminal Management View (Admin only) -->
+    <div class="view orderbook-page" id="terminalAdminView">
+        <div class="exchange-content" style="max-width: 900px;">
+            <div class="exchange-header">
+                <h1>Terminal Management</h1>
+            </div>
+            <div class="term-admin-tabs">
+                <button class="term-admin-tab active" data-tab="flags">Flagged Deals</button>
+                <button class="term-admin-tab" data-tab="carts">Saved Carts</button>
+                <button class="term-admin-tab" data-tab="consults">Consultations</button>
+            </div>
+            <div class="um-search-wrap">
+                <input type="text" class="um-search" id="termAdminSearch" placeholder="Search by user, material, or coords...">
+            </div>
+            <div id="termAdminContent" class="um-list"></div>
+        </div>
+    </div>
+
+    <!-- Terminal View (subscription gated) -->
+    <div class="view" id="terminalView">
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <h1 class="terminal-title">Terminal</h1>
+                <p class="terminal-subtitle" id="terminalSubtitle">by Maison Fris</p>
+            </div>
+            <div class="terminal-tools" id="terminalTools"></div>
+            <div class="terminal-panel" id="terminalPanel" style="display:none;">
+                <div class="terminal-panel-top">
+                    <button class="terminal-back-btn" id="terminalBackBtn">&larr; Back</button>
+                    <button class="terminal-refresh-btn" id="terminalRefreshBtn">Refresh</button>
+                </div>
+                <div class="terminal-panel-body" id="terminalPanelBody"></div>
+            </div>
         </div>
     </div>
 
@@ -3715,11 +4388,11 @@
         </div>
     </div>
 
-    <script src="app.js?v=159"></script>
-    <script src="nc-map.js?v=163"></script>
+    <script src="app.js?v=163"></script>
+    <script src="nc-map.js?v=164"></script>
     <script src="nc-table.js?v=159"></script>
     <script src="nc-modals.js?v=159"></script>
-    <script src="nc-shops.js?v=164"></script>
+    <script src="nc-shops.js?v=176"></script>
     <script src="nc-init.js?v=159"></script>
 </body>
 </html>

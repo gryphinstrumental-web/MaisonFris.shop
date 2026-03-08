@@ -30,8 +30,46 @@ let ncSavedDealsLoaded = false;
     } catch {}
 })();
 
+function ncIsCompacted(item) {
+    return item?.lore?.includes('Compacted Item');
+}
+
+const NC_ENCHANT_ABBR = {
+    'Efficiency': 'Eff', 'Unbreaking': 'Unb', 'Fortune': 'Fort', 'Silk Touch': 'ST',
+    'Sharpness': 'Sharp', 'Smite': 'Smite', 'Bane of Arthropods': 'BoA',
+    'Protection': 'Prot', 'Fire Protection': 'FP', 'Blast Protection': 'BP',
+    'Projectile Protection': 'PP', 'Feather Falling': 'FF', 'Thorns': 'Thorns',
+    'Respiration': 'Resp', 'Aqua Affinity': 'AA', 'Depth Strider': 'DS',
+    'Fire Aspect': 'FA', 'Knockback': 'KB', 'Looting': 'Loot',
+    'Sweeping Edge': 'Sweep', 'Power': 'Pow', 'Punch': 'Punch',
+    'Flame': 'Flame', 'Infinity': 'Inf', 'Mending': 'Mend',
+    'Channeling': 'Chan', 'Riptide': 'Ript', 'Loyalty': 'Loyal',
+    'Impaling': 'Imp', 'Piercing': 'Pierce', 'Quick Charge': 'QC',
+    'Multishot': 'Multi', 'Frost Walker': 'FW', 'Soul Speed': 'SS',
+    'Swift Sneak': 'SwSn', 'Luck of the Sea': 'Luck', 'Lure': 'Lure',
+};
+
+function ncEnchantStr(item) {
+    const ench = item?.requiredEnchants || item?.storedEnchants || {};
+    const entries = Object.entries(ench);
+    if (entries.length === 0) return '';
+    return entries.map(([name, lvl]) => (NC_ENCHANT_ABBR[name] || name) + lvl).join(' ');
+}
+
+function ncMatName(item) {
+    let name = item?.customName || item?.material || '?';
+    if (ncIsCompacted(item)) name += ' [C]';
+    const ench = ncEnchantStr(item);
+    if (ench) name += ' [' + ench + ']';
+    return name;
+}
+
 function ncDealKey(e) {
-    return `${e.pos.x},${e.pos.y},${e.pos.z}|${e.input?.material || ''}|${e.output?.material || ''}`;
+    const inC = ncIsCompacted(e.input) ? '[C]' : '';
+    const outC = ncIsCompacted(e.output) ? '[C]' : '';
+    const inE = ncEnchantStr(e.input);
+    const outE = ncEnchantStr(e.output);
+    return `${e.pos.x},${e.pos.y},${e.pos.z}|${e.input?.material || ''}${inC}${inE ? '{' + inE + '}' : ''}|${e.output?.material || ''}${outC}${outE ? '{' + outE + '}' : ''}`;
 }
 
 async function ncLoadSavedDeals() {
@@ -394,8 +432,8 @@ function ncRenderShopResults() {
 
     let html = '';
     ncShopFiltered.forEach((e, i) => {
-        const inName = e.input?.customName || e.input?.material || '?';
-        const outName = e.output?.customName || e.output?.material || '?';
+        const inName = ncMatName(e.input);
+        const outName = ncMatName(e.output);
         const inCount = e.input?.count || 1;
         const outCount = e.output?.count || 1;
         const stockClass = e.stock > 0 ? 'in-stock' : 'out-stock';
@@ -565,13 +603,10 @@ function ncShopPopupHTML(exchanges) {
 
     // Trades list — each trade gets its own View on Table + Save to Cart buttons
     exchanges.forEach((e, i) => {
-        const inName = e.input?.customName || e.input?.material || '?';
-        const outName = e.output?.customName || e.output?.material || '?';
+        const inName = ncMatName(e.input);
+        const outName = ncMatName(e.output);
         const stockStyle = e.stock > 0 ? 'color:#4caf50' : 'color:#e04040';
         const stockText = e.stock > 0 ? `In Stock (${e.stock})` : 'Out of Stock';
-        const enchants = e.output?.storedEnchants || {};
-        const enchList = Object.entries(enchants);
-        const enchStr = enchList.length > 0 ? ` <span style="color:#a78bfa;font-size:0.7rem;">${enchList.map(([n, l]) => `${n} ${l}`).join(', ')}</span>` : '';
 
         if (i > 0) h += `<div style="border-top:1px solid rgba(184,180,204,0.1);"></div>`;
         h += `<div style="padding:0.25rem 0;">`;
@@ -581,10 +616,10 @@ function ncShopPopupHTML(exchanges) {
         h += `<span style="color:var(--text-muted);">${ncFormatAge(e.time)}</span>`;
         h += `</div>`;
         // Trade line (larger, centered)
-        h += `<div style="font-size:1rem;white-space:nowrap;text-align:center;">`;
+        h += `<div style="font-size:1rem;white-space:normal;text-align:center;">`;
         h += `<strong>${e.input?.count || 1}x</strong> ${ncEsc(inName)}`;
         h += ` <span style="color:var(--text-muted);">&rarr;</span> `;
-        h += `<strong>${e.output?.count || 1}x</strong> ${ncEsc(outName)}${enchStr}`;
+        h += `<strong>${e.output?.count || 1}x</strong> ${ncEsc(outName)}`;
         h += `</div>`;
         // Per-trade View on Table + Save to Cart buttons
         const dk = ncDealKey(e);
@@ -1097,8 +1132,8 @@ function ncShopTableRow(e) {
     const propName = assocProp ? assocProp.name : '';
     const propId = assocProp ? assocProp.id : null;
     const discordContact = (link && link.discord_contact) || (assocProp && assocProp.discord_contact) || '';
-    const outName = e.output?.customName || e.output?.material || '?';
-    const inName = e.input?.customName || e.input?.material || '?';
+    const outName = ncMatName(e.output);
+    const inName = ncMatName(e.input);
     const inCount = e.input?.count || 1;
     const outCount = e.output?.count || 1;
     return { e, propName, propId, discordContact, outName, outCount, inName, inCount };
@@ -1379,8 +1414,8 @@ function ncRenderCartPanel() {
     const inputs = {};
     const outputs = {};
     saved.forEach(({ e, qty }) => {
-        const inMat = e.input?.customName || e.input?.material || '?';
-        const outMat = e.output?.customName || e.output?.material || '?';
+        const inMat = ncMatName(e.input);
+        const outMat = ncMatName(e.output);
         const inCount = (e.input?.count || 1) * qty;
         const outCount = (e.output?.count || 1) * qty;
         inputs[inMat] = (inputs[inMat] || 0) + inCount;
@@ -1401,8 +1436,8 @@ function ncRenderCartPanel() {
     // Deal list
     let listHtml = '';
     saved.forEach(({ key, qty, e }) => {
-        const inName = e.input?.customName || e.input?.material || '?';
-        const outName = e.output?.customName || e.output?.material || '?';
+        const inName = ncMatName(e.input);
+        const outName = ncMatName(e.output);
         const coordStr = `${e.pos.x}, ${e.pos.y}, ${e.pos.z}`;
         const stockStyle = e.stock > 0 ? 'color:#4caf50' : 'color:#e04040';
         const stockLabel = e.stock > 0 ? `In Stock (${e.stock})` : 'Out';
@@ -1422,4 +1457,1032 @@ function ncRenderCartPanel() {
     listEl.innerHTML = listHtml;
 
     ncUpdateCartBadge();
+}
+
+// ============================================
+// Terminal — Market Intelligence Dashboard
+// ============================================
+const TERMINAL_CITIES = [
+    { name: 'New Callisto', x: -3163, z: 8168 },
+    { name: 'Pavia', x: 796, z: -3044 },
+    { name: 'Icenia', x: -3764, z: -4324 },
+    { name: 'Volterra', x: -1069, z: -1172 },
+    { name: 'Danzilona', x: 5251, z: 4530 },
+    { name: 'Shiroyama', x: 3367, z: 5045 },
+    { name: 'Kallopolis', x: -964, z: -3576 },
+    { name: 'Blue Cove', x: -9140, z: -404 },
+    { name: 'Suramir', x: 1, z: -600 },
+    { name: 'Shockton', x: -1603, z: -1137 },
+    { name: 'Adria', x: 2599, z: -3999 },
+    { name: 'Mosskow', x: 5852, z: -6530 },
+    { name: 'Roma', x: 3088, z: -5376 },
+    { name: 'England', x: 3774, z: -5937 },
+    { name: 'Altepetl', x: 7609, z: -738 },
+    { name: "Ila'Kyavul", x: 7053, z: 3655 },
+    { name: 'Santiago', x: 6462, z: 3036 },
+    { name: 'Brunsvik', x: -7309, z: 4697 },
+    { name: 'Kardyia', x: -8152, z: 1342 },
+    { name: 'Withervale', x: -6550, z: 6840 },
+    { name: 'Groveheart', x: -5971, z: 5529 },
+    { name: 'Regenburg', x: -3500, z: 8901 },
+    { name: 'Florabis', x: -3350, z: 9244 },
+    { name: 'Mount Augusta', x: 3052, z: 2235 },
+    { name: 'Lambat City', x: 3829, z: -1350 },
+];
+
+let terminalCurrentTool = null;
+
+function loadTerminal() {
+    const toolsEl = document.getElementById('terminalTools');
+    const panelEl = document.getElementById('terminalPanel');
+    if (!toolsEl) return;
+    panelEl.style.display = 'none';
+    toolsEl.style.display = '';
+    terminalCurrentTool = null;
+
+    const showGetTerminal = !currentUser || !userProfile?.terminal;
+
+    const consultDisabled = showGetTerminal ? ' terminal-tool-disabled' : '';
+    toolsEl.innerHTML = `
+        <div class="terminal-tool-card" data-tool="arbitrage">
+            <div class="terminal-tool-icon">&#x21C4;</div>
+            <h3>Arbitrage Finder</h3>
+            <p>Live cross-market profit identification and routing tool for CivMc. Free Samples.</p>
+        </div>
+        <div class="terminal-tool-card terminal-tool-disabled" data-tool="intel">
+            <span class="terminal-ribbon">Coming Soon</span>
+            <div class="terminal-tool-icon">&#x2637;</div>
+            <h3>Market Intelligence</h3>
+            <p>Investment-grade information and analysis of equities listed on the Pavian Stock Exchange.</p>
+        </div>
+        <div class="terminal-tool-card${consultDisabled}" data-tool="consult">
+            <div class="terminal-tool-icon">&#x2709;</div>
+            <h3>Schedule a Consultation</h3>
+            <p>Terminal entitles you to two monthly confidential consultations. Schedule here.</p>
+        </div>
+        <div class="terminal-tool-card terminal-tool-disabled" data-tool="notifications">
+            <span class="terminal-ribbon">Coming Soon</span>
+            <div class="terminal-tool-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <h3>Price Notifications</h3>
+            <p>Create standing orders for goods or exchange rates and choose how you would like to be notified.</p>
+        </div>
+        <div class="terminal-tool-card terminal-tool-disabled" data-tool="deals">
+            <span class="terminal-ribbon">Coming Soon</span>
+            <div class="terminal-tool-icon">&#x2616;</div>
+            <h3>Off-Market Deals</h3>
+            <p>List, access, and execute real estate, fixed income, private equities, and bulk goods off market.</p>
+        </div>
+        <div class="terminal-tool-card terminal-tool-disabled" data-tool="oracle">
+            <span class="terminal-ribbon">Coming Soon</span>
+            <div class="terminal-tool-icon">&#x25C8;</div>
+            <h3>Oracle</h3>
+            <p>Chat with an A.I. trained on live CivMC data.</p>
+        </div>
+    ` + (showGetTerminal ? '<div class="terminal-get-btn-wrap"><button class="terminal-get-btn" id="terminalGetBtn">Get Terminal</button></div>' : '');
+
+    toolsEl.querySelectorAll('.terminal-tool-card').forEach(card => {
+        card.addEventListener('click', () => {
+            if (card.classList.contains('terminal-tool-disabled')) return;
+            const tool = card.dataset.tool;
+            if (tool === 'arbitrage') terminalOpenArbitrage();
+            if (tool === 'consult') terminalOpenConsultation();
+        });
+    });
+
+    // "Get Terminal" popup
+    const getBtn = document.getElementById('terminalGetBtn');
+    if (getBtn) getBtn.addEventListener('click', () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const dayOfMonth = now.getDate();
+        const daysRemaining = daysInMonth - dayOfMonth + 1;
+        const prorated = Math.round((daysRemaining / daysInMonth) * 50);
+        const total = prorated + 50;
+
+        const existing = document.getElementById('terminalGetPopup');
+        if (existing) existing.remove();
+        const popup = document.createElement('div');
+        popup.id = 'terminalGetPopup';
+        popup.className = 'terminal-trade-popup';
+        popup.innerHTML = '<div class="terminal-trade-popup-inner">'
+            + '<button class="terminal-trade-popup-close">&times;</button>'
+            + '<h3>Get Terminal</h3>'
+            + '<p style="font-size:1.1rem;text-align:center;margin-bottom:1rem;"><strong style="color:#d4c8a0;font-size:1.3rem;">50 Diamonds / Month</strong></p>'
+            + '<p>Send <strong>' + total + ' Diamonds</strong> (' + prorated + 'd prorated for remainder of ' + now.toLocaleString('en-US', { month: 'long' }) + ' + 50d for next month) to <strong>HS-FRIS</strong> to unlock all of Maison Fris Terminal for this month and next.</p>'
+            + '<p style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:0.75rem;">Monthly price will raise to 100 diamonds a month upon completion of current shown features.</p>'
+            + '<ul style="font-size:0.75rem;color:var(--text-muted);margin:1rem 0;padding-left:1.2rem;line-height:1.8;">'
+            + '<li>Monthly subscription. Payments required at least 24 hours prior to the 1st of each month.</li>'
+            + '<li>Allow up to 24 hours for confirmation and access.</li>'
+            + '<li>Limit one user per license.</li>'
+            + '<li>Sharing data or abuse will result in a ban and a bounty.</li>'
+            + '<li>Enterprise rates available upon request.</li>'
+            + '</ul>'
+            + '<p style="font-size:0.65rem;color:var(--text-muted);font-style:italic;margin-top:1rem;line-height:1.6;">Terminal is an evolving product and functionality is intended but not always guaranteed. Certain features may be limited or greyed out depending on the needs of the firm.</p>'
+            + '</div>';
+        document.body.appendChild(popup);
+        popup.querySelector('.terminal-trade-popup-close').addEventListener('click', () => popup.remove());
+        popup.addEventListener('click', (ev) => { if (ev.target === popup) popup.remove(); });
+    });
+
+    document.getElementById('terminalBackBtn').onclick = () => {
+        panelEl.style.display = 'none';
+        toolsEl.style.display = '';
+        terminalCurrentTool = null;
+        document.getElementById('terminalSubtitle').textContent = 'by Maison Fris';
+        document.getElementById('terminalRefreshBtn').style.display = '';
+    };
+
+    // Pre-fetch arbitrage data in background
+    terminalPrefetch();
+}
+
+// --- Arbitrage state ---
+let terminalArbData = [];       // all computed arb opportunities (unfiltered)
+let terminalCityTrades = {};    // trades grouped by city
+let terminalTotalExchanges = 0;
+let terminalArbSort = { col: 'netProfit', dir: 'desc' };
+let terminalArbFilters = { city: '', material: '', sameCity: false, hideStale: false, diamondStart: false, staleHours: 48, maxDist: false, maxDistBlocks: 3000 };
+let terminalAutoRefreshId = null;
+let terminalPrefetchPromise = null; // background fetch promise
+
+// Server-verified terminal gate (closure-protected, tamper-resistant)
+const _terminalGate = (() => {
+    let _paid = false;
+    function _showTamperToast() {
+        let t = document.getElementById('terminalTamperToast');
+        if (!t) {
+            t = document.createElement('div');
+            t.id = 'terminalTamperToast';
+            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#d4c8a0;color:#1a1730;padding:10px 24px;border-radius:6px;font-family:Raleway,sans-serif;font-size:0.85rem;font-weight:600;z-index:99999;opacity:0;transition:opacity 0.3s;';
+            document.body.appendChild(t);
+        }
+        t.textContent = 'Terminal access required.';
+        t.style.opacity = '1';
+        clearTimeout(t._tid);
+        t._tid = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    }
+    // Honeypot: trap the obvious global name
+    Object.defineProperty(window, '_terminalVerifiedPaid', {
+        get() { return _paid; },
+        set() { _showTamperToast(); },
+        configurable: false, enumerable: false
+    });
+    return Object.freeze({
+        async verify() {
+            if (!currentUser || !currentAccessToken) { _paid = false; return false; }
+            try {
+                const rows = await supabaseRest('profiles', `select=terminal&id=eq.${currentUser.id}`);
+                _paid = rows?.[0]?.terminal === true;
+            } catch { _paid = false; }
+            return _paid;
+        },
+        get isPaid() { return _paid; }
+    });
+})();
+
+function terminalPrefetch() {
+    terminalPrefetchPromise = terminalFetchArbitrage();
+}
+
+async function terminalOpenArbitrage() {
+    const toolsEl = document.getElementById('terminalTools');
+    const panelEl = document.getElementById('terminalPanel');
+    toolsEl.style.display = 'none';
+    panelEl.style.display = '';
+    terminalCurrentTool = 'arbitrage';
+    document.getElementById('terminalSubtitle').textContent = 'Arbitrage Finder';
+    // Verify terminal status server-side first
+    await _terminalGate.verify();
+
+    const refreshBtn = document.getElementById('terminalRefreshBtn');
+    if (_terminalGate.isPaid) {
+        refreshBtn.style.display = '';
+        refreshBtn.onclick = () => loadTerminalArbitrage();
+    } else {
+        refreshBtn.style.display = 'none';
+    }
+
+    // Use prefetched data if available, otherwise fetch fresh
+    if (terminalPrefetchPromise) {
+        const body = document.getElementById('terminalPanelBody');
+        body.innerHTML = '<div class="terminal-loading">Scanning markets...</div>';
+        terminalPrefetchPromise.then(() => {
+            if (terminalCurrentTool === 'arbitrage') terminalRenderArbitrage();
+        }).catch(() => {
+            body.innerHTML = '<div class="terminal-loading">Failed to fetch market data. Try refreshing.</div>';
+        });
+        terminalPrefetchPromise = null;
+    } else {
+        loadTerminalArbitrage();
+    }
+
+    // Auto-refresh every 5 minutes (paid users only)
+    if (terminalAutoRefreshId) clearInterval(terminalAutoRefreshId);
+    if (_terminalGate.isPaid) {
+        terminalAutoRefreshId = setInterval(() => {
+            if (terminalCurrentTool === 'arbitrage') loadTerminalArbitrage();
+        }, 300000);
+    }
+}
+
+function terminalTimeAgo(epochMs) {
+    if (!epochMs) return 'unknown';
+    const diff = Date.now() - epochMs;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    return days + 'd ago';
+}
+
+function terminalFreshClass(epochMs) {
+    if (!epochMs) return 'stale';
+    const hrs = (Date.now() - epochMs) / 3600000;
+    if (hrs < 6) return 'fresh';
+    if (hrs < 48) return 'aging';
+    return 'stale';
+}
+
+function terminalClosestCity(x, z) {
+    let best = 'Unknown';
+    let bestDist = Infinity;
+    for (const c of TERMINAL_CITIES) {
+        const dx = x - c.x;
+        const dz = z - c.z;
+        const dist = dx * dx + dz * dz;
+        if (dist < bestDist) { bestDist = dist; best = c.name; }
+    }
+    return { name: best, dist: Math.round(Math.sqrt(bestDist)) };
+}
+
+function terminalDistance(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dz = p1.z - p2.z;
+    return Math.round(Math.sqrt(dx * dx + dz * dz));
+}
+
+function terminalCopyCoords(x, y, z) {
+    const text = x + ' ' + y + ' ' + z;
+    navigator.clipboard.writeText(text).then(() => {
+        // Brief flash feedback
+        const el = document.querySelector('.terminal-copy-flash');
+        if (el) { el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 1200); }
+    }).catch(() => {});
+}
+
+async function terminalFetchArbitrage() {
+    const resp = await fetch(TRADEX_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
+            sortMode: 'closest', limit: 10000, allowUnstocked: false
+        })
+    });
+    if (!resp.ok) throw new Error('Tradex API ' + resp.status);
+    const data = await resp.json();
+    const allExchanges = data.exchanges || [];
+    terminalTotalExchanges = allExchanges.length;
+
+    // Assign each trade to closest city, accounting for compacted items + enchantments
+    const trades = [];
+    terminalCityTrades = {};
+    for (const e of allExchanges) {
+        if (!e.stock || e.stock <= 0) continue;
+        let inMat = e.input?.material;
+        let outMat = e.output?.material;
+        if (!inMat || !outMat) continue;
+        if (ncIsCompacted(e.input)) inMat += ' [C]';
+        if (ncIsCompacted(e.output)) outMat += ' [C]';
+        const inEnch = ncEnchantStr(e.input);
+        const outEnch = ncEnchantStr(e.output);
+        if (inEnch) inMat += ' [' + inEnch + ']';
+        if (outEnch) outMat += ' [' + outEnch + ']';
+        const closest = terminalClosestCity(e.pos.x, e.pos.z);
+        const city = closest.name;
+        const cityDist = closest.dist;
+        if (!terminalCityTrades[city]) terminalCityTrades[city] = [];
+        terminalCityTrades[city].push(e);
+        trades.push({
+            city, cityDist, inputMat: inMat, outputMat: outMat,
+            inCount: e.input?.count || 1, outCount: e.output?.count || 1,
+            pos: e.pos, stock: e.stock, time: e.time
+        });
+    }
+
+    // Circular arbitrage
+    const byInput = {};
+    for (const t of trades) {
+        if (!byInput[t.inputMat]) byInput[t.inputMat] = [];
+        byInput[t.inputMat].push(t);
+    }
+
+    const circulars = [];
+    for (const t1 of trades) {
+        const reverses = byInput[t1.outputMat] || [];
+        for (const t2 of reverses) {
+            if (t2.outputMat !== t1.inputMat) continue;
+            const maxStep1 = t1.stock;
+            const outputFromStep1 = t1.outCount * maxStep1;
+            const maxStep2FromOutput = Math.floor(outputFromStep1 / t2.inCount);
+            const maxStep2 = Math.min(maxStep2FromOutput, t2.stock);
+            const netReturn = (t1.outCount / t2.inCount) * t2.outCount;
+            const profit = netReturn / t1.inCount;
+            if (profit <= 1.05) continue;
+            const realizableCycles = Math.min(maxStep1, Math.ceil(maxStep2 * t2.inCount / t1.outCount));
+            const step2Trades = Math.min(Math.floor(realizableCycles * t1.outCount / t2.inCount), t2.stock);
+            const spent = realizableCycles * t1.inCount;
+            const back = step2Trades * t2.outCount;
+            const netProfit = back - spent;
+            if (netProfit <= 0) continue;
+            const dist = terminalDistance(t1.pos, t2.pos);
+            circulars.push({ t1, t2, profit, netProfit, realizableCycles, step2Trades, spent, back, dist });
+        }
+    }
+
+    // Deduplicate
+    const seen = new Set();
+    terminalArbData = [];
+    for (const c of circulars) {
+        const key = c.t1.pos.x + ',' + c.t1.pos.z + '|' + c.t2.pos.x + ',' + c.t2.pos.z + '|' + c.t1.inputMat + '|' + c.t1.outputMat;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        terminalArbData.push(c);
+    }
+}
+
+async function loadTerminalArbitrage() {
+    const body = document.getElementById('terminalPanelBody');
+    body.innerHTML = '<div class="terminal-loading">Scanning markets...</div>';
+    try {
+        // Verify terminal status server-side each load (prevents console spoofing)
+        await _terminalGate.verify();
+        await terminalFetchArbitrage();
+        terminalRenderArbitrage();
+    } catch (err) {
+        console.error('Terminal arbitrage error:', err);
+        body.innerHTML = '<div class="terminal-loading">Failed to fetch market data. Try refreshing.</div>';
+    }
+}
+
+function terminalGetFilteredSorted(forceOnlyDiamond) {
+    let rows = terminalArbData.slice();
+    const f = terminalArbFilters;
+
+    // Free users: diamond only, max 10 net profit
+    if (forceOnlyDiamond) {
+        rows = rows.filter(c => c.t1.inputMat.toLowerCase().includes('diamond') && c.netProfit <= 10);
+    }
+    // Filter: city
+    if (f.city) {
+        rows = rows.filter(c => c.t1.city === f.city || c.t2.city === f.city);
+    }
+    // Filter: material search
+    if (f.material) {
+        const q = f.material.toLowerCase();
+        rows = rows.filter(c => c.t1.inputMat.toLowerCase().includes(q) || c.t1.outputMat.toLowerCase().includes(q));
+    }
+    // Filter: same city
+    if (f.sameCity) {
+        rows = rows.filter(c => c.t1.city === c.t2.city);
+    }
+    // Filter: hide stale (>48h)
+    if (f.hideStale) {
+        const cutoff = Date.now() - terminalArbFilters.staleHours * 3600000;
+        rows = rows.filter(c => (c.t1.time || 0) > cutoff && (c.t2.time || 0) > cutoff);
+    }
+    // Filter: diamond start
+    if (f.diamondStart) {
+        rows = rows.filter(c => c.t1.inputMat.toLowerCase().includes('diamond'));
+    }
+    // Filter: max distance
+    if (f.maxDist) {
+        rows = rows.filter(c => c.dist <= f.maxDistBlocks);
+    }
+
+    // Sort
+    const dir = terminalArbSort.dir === 'asc' ? 1 : -1;
+    const col = terminalArbSort.col;
+    rows.sort((a, b) => {
+        let va, vb;
+        switch (col) {
+            case 'route': va = a.t1.inputMat; vb = b.t1.inputMat; return va.localeCompare(vb) * dir;
+            case 'profit': va = a.profit; vb = b.profit; break;
+            case 'buy': va = a.t1.city; vb = b.t1.city; return va.localeCompare(vb) * dir;
+            case 'sell': va = a.t2.city; vb = b.t2.city; return va.localeCompare(vb) * dir;
+            case 'dist': va = a.dist; vb = b.dist; break;
+            case 'exchanges': va = a.realizableCycles + a.step2Trades; vb = b.realizableCycles + b.step2Trades; break;
+            case 'netProfit': va = a.netProfit; vb = b.netProfit; break;
+            case 'fresh': va = Math.min(a.t1.time || 0, a.t2.time || 0); vb = Math.min(b.t1.time || 0, b.t2.time || 0); break;
+            case 'updated': va = Math.min(a.t1.time || 0, a.t2.time || 0); vb = Math.min(b.t1.time || 0, b.t2.time || 0); break;
+            default: va = a.netProfit; vb = b.netProfit;
+        }
+        return (va - vb) * dir;
+    });
+
+    return forceOnlyDiamond ? rows.slice(0, 6) : rows;
+}
+
+function terminalSortIcon(col) {
+    if (terminalArbSort.col !== col) return ' <span style="opacity:0.3;">&#x25B4;&#x25BE;</span>';
+    return terminalArbSort.dir === 'asc' ? ' <span>&#x25B4;</span>' : ' <span>&#x25BE;</span>';
+}
+
+function terminalRenderArbitrage() {
+    const body = document.getElementById('terminalPanelBody');
+
+    // Ticker
+    const cityNames = TERMINAL_CITIES.map(c => c.name).filter(n => terminalCityTrades[n]);
+    const citySummary = cityNames.map(name => {
+        const exs = terminalCityTrades[name] || [];
+        const stocked = exs.filter(e => e.stock > 0).length;
+        const newest = exs.reduce((max, e) => Math.max(max, e.time || 0), 0);
+        const freshCls = terminalFreshClass(newest);
+        const ago = newest ? terminalTimeAgo(newest) : 'no data';
+        return '<span class="terminal-ticker-item"><span class="terminal-fresh-dot ' + freshCls + '"></span>' + ncEsc(name) + ' <span style="color:var(--text-muted);">' + stocked + ' &middot; ' + ago + '</span></span>';
+    });
+    const tickerContent = citySummary.join('') + citySummary.join('');
+
+    let html = '<div class="terminal-ticker"><div class="terminal-ticker-track">' + tickerContent + '</div></div>';
+
+    // Filtered data
+    const isFreeUser = !_terminalGate.isPaid;
+
+    // Filter bar (hidden for free users)
+    const cityOpts = TERMINAL_CITIES.map(c => c.name).filter(n => terminalCityTrades[n]).sort()
+        .map(n => '<option value="' + ncEsc(n) + '"' + (terminalArbFilters.city === n ? ' selected' : '') + '>' + ncEsc(n) + '</option>').join('');
+
+    if (!isFreeUser) {
+    html += '<div class="terminal-filter-bar">';
+    html += '<select id="termArbCity" class="terminal-filter-select"><option value="">All Cities</option>' + cityOpts + '</select>';
+    html += '<input type="text" id="termArbMaterial" class="terminal-filter-input" placeholder="Search material..." value="' + ncEsc(terminalArbFilters.material) + '">';
+    html += '<button id="termArbDiamond" class="terminal-filter-toggle' + (terminalArbFilters.diamondStart ? ' active' : '') + '">Diamond Profit</button>';
+    html += '<button id="termArbSameCity" class="terminal-filter-toggle' + (terminalArbFilters.sameCity ? ' active' : '') + '">Same City</button>';
+    html += '<button id="termArbHideStale" class="terminal-filter-toggle' + (terminalArbFilters.hideStale ? ' active' : '') + '">Hide Stale</button>';
+    const staleOpts = [6,12,24,48,72,168].map(h => {
+        const label = h < 24 ? h + 'h' : (h / 24) + 'd';
+        return '<option value="' + h + '"' + (terminalArbFilters.staleHours === h ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
+    html += '<select id="termArbStaleHours" class="terminal-filter-select" style="min-width:auto;width:auto;padding:0.25rem 0.3rem;font-size:0.65rem;" title="Stale cutoff">' + staleOpts + '</select>';
+    html += '<button id="termArbMaxDist" class="terminal-filter-toggle' + (terminalArbFilters.maxDist ? ' active' : '') + '">Max Dist</button>';
+    const distOpts = [500,1000,2000,3000,5000,10000].map(d => {
+        const label = d >= 1000 ? (d / 1000) + 'k' : d;
+        return '<option value="' + d + '"' + (terminalArbFilters.maxDistBlocks === d ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
+    html += '<select id="termArbMaxDistBlocks" class="terminal-filter-select" style="min-width:auto;width:auto;padding:0.25rem 0.3rem;font-size:0.65rem;" title="Max distance">' + distOpts + '</select>';
+    html += '<span class="terminal-copy-flash">Copied!</span>';
+    html += '<span style="font-size:0.6rem;color:var(--text-muted);opacity:0.6;margin-left:auto;">Auto-refresh 5m</span>';
+    html += '</div>';
+    } // end filter bar (paid users only)
+
+    const filtered = terminalGetFilteredSorted(isFreeUser);
+
+    html += '<div style="text-align:center;margin-bottom:0.5rem;"><span style="font-size:0.65rem;color:var(--text-muted);opacity:0.7;">' + terminalTotalExchanges + ' trades scanned &middot; ' + filtered.length + ' of ' + terminalArbData.length + ' opportunities shown</span></div>';
+
+    // Table with sortable headers + column filters
+    html += '<div class="terminal-arb-wrap"><table class="terminal-arb-table"><thead><tr>';
+    html += '<th class="terminal-sort-th" data-sort="fresh">' + terminalSortIcon('fresh') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="route">Route' + terminalSortIcon('route') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="profit">Profit' + terminalSortIcon('profit') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="buy">Buy' + terminalSortIcon('buy') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="sell">Sell' + terminalSortIcon('sell') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="dist">Dist' + terminalSortIcon('dist') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="exchanges">Exchanges' + terminalSortIcon('exchanges') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="netProfit">Net Profit' + terminalSortIcon('netProfit') + '</th>';
+    html += '<th class="terminal-sort-th" data-sort="updated">Updated' + terminalSortIcon('updated') + '</th>';
+    html += '<th></th>';
+    html += '</tr></thead><tbody>';
+
+    for (let idx = 0; idx < filtered.length; idx++) {
+        const c = filtered[idx];
+        const pct = ((c.profit - 1) * 100).toFixed(0);
+        const inName = c.t1.inputMat.replace(/_/g, ' ');
+        const midName = c.t1.outputMat.replace(/_/g, ' ');
+        const freshBuy = terminalFreshClass(c.t1.time);
+        const freshSell = terminalFreshClass(c.t2.time);
+        const oldestFresh = (freshBuy === 'stale' || freshSell === 'stale') ? 'stale' : (freshBuy === 'aging' || freshSell === 'aging') ? 'aging' : 'fresh';
+        const sameCity = c.t1.city === c.t2.city;
+        const buyRural = c.t1.cityDist > 600 ? '<br><span class="terminal-rural">600m+ Away, Nearest City</span>' : '';
+        const sellRural = c.t2.cityDist > 600 ? '<br><span class="terminal-rural">600m+ Away, Nearest City</span>' : '';
+        const oldestTime = Math.min(c.t1.time || 0, c.t2.time || 0);
+
+        // Free user: 6 rows total — first 2 blurred, next 2 visible (no %), last 2 blurred
+        let blurred = false;
+        let hideProfit = false;
+        if (isFreeUser) {
+            if (idx >= 6) continue;
+            if (idx < 2 || idx >= 4) {
+                blurred = true;
+            } else {
+                hideProfit = true;
+            }
+        }
+
+        if (blurred) {
+            // Render placeholder data — no real info in DOM
+            html += '<tr class="terminal-row-blurred">';
+            html += '<td><span class="terminal-fresh-dot aging"></span></td>';
+            html += '<td>Diamond &rarr; ??? &rarr; Diamond</td>';
+            html += '<td><span class="terminal-arb-pct">??%</span></td>';
+            html += '<td><span class="terminal-arb-city">???</span><br><span class="terminal-arb-coords">[?, ?, ?]</span><br><span class="terminal-arb-coords">stock: ?</span></td>';
+            html += '<td><span class="terminal-arb-city">???</span><br><span class="terminal-arb-coords">[?, ?, ?]</span><br><span class="terminal-arb-coords">stock: ?</span></td>';
+            html += '<td>?</td>';
+            html += '<td>? buy<br>? sell</td>';
+            html += '<td><span class="terminal-arb-profit">+?</span><br><span class="terminal-arb-coords">Diamond</span></td>';
+            html += '<td style="white-space:nowrap;font-size:0.7rem;color:var(--text-muted);">?</td>';
+            html += '<td></td>';
+            html += '</tr>';
+        } else {
+            const rowClass = 'terminal-row-clickable';
+            html += '<tr class="' + rowClass + '" data-arb-idx="' + idx + '">';
+            html += '<td><span class="terminal-fresh-dot ' + oldestFresh + '" title="Buy: ' + terminalTimeAgo(c.t1.time) + ', Sell: ' + terminalTimeAgo(c.t2.time) + '"></span></td>';
+            html += '<td>' + ncEsc(inName) + ' &rarr; ' + ncEsc(midName) + ' &rarr; ' + ncEsc(inName) + '</td>';
+            html += '<td><span class="terminal-arb-pct">' + (hideProfit ? '&mdash;' : pct + '%') + '</span></td>';
+            html += '<td><span class="terminal-arb-city">' + ncEsc(c.t1.city) + buyRural + '</span><br><span class="terminal-arb-coords terminal-clickable-coords" onclick="terminalCopyCoords(' + c.t1.pos.x + ',' + c.t1.pos.y + ',' + c.t1.pos.z + ')" title="Click to copy">[' + c.t1.pos.x + ', ' + c.t1.pos.y + ', ' + c.t1.pos.z + ']</span><br><span class="terminal-arb-coords">stock: ' + c.t1.stock + '</span></td>';
+            html += '<td><span class="terminal-arb-city">' + ncEsc(c.t2.city) + sellRural + '</span><br><span class="terminal-arb-coords terminal-clickable-coords" onclick="terminalCopyCoords(' + c.t2.pos.x + ',' + c.t2.pos.y + ',' + c.t2.pos.z + ')" title="Click to copy">[' + c.t2.pos.x + ', ' + c.t2.pos.y + ', ' + c.t2.pos.z + ']</span><br><span class="terminal-arb-coords">stock: ' + c.t2.stock + '</span></td>';
+            html += '<td>' + (sameCity ? '<span style="color:#a8d4a0;">' + c.dist + '</span>' : c.dist) + '</td>';
+            html += '<td>' + c.realizableCycles + ' buy<br>' + c.step2Trades + ' sell</td>';
+            html += '<td><span class="terminal-arb-profit">+' + c.netProfit + '</span><br><span class="terminal-arb-coords">' + ncEsc(inName) + '</span></td>';
+            html += '<td style="white-space:nowrap;font-size:0.7rem;color:var(--text-muted);">' + terminalTimeAgo(oldestTime) + '</td>';
+            html += '<td><button class="terminal-flag-btn" data-buy="' + c.t1.pos.x + ',' + c.t1.pos.y + ',' + c.t1.pos.z + '" data-sell="' + c.t2.pos.x + ',' + c.t2.pos.y + ',' + c.t2.pos.z + '" data-route="' + ncEsc(c.t1.inputMat) + '|' + ncEsc(c.t1.outputMat) + '" title="Flag this route">&#x2691;</button></td>';
+            html += '</tr>';
+        }
+    }
+
+    html += '</tbody></table></div>';
+
+    if (filtered.length === 0) {
+        html += '<div class="terminal-loading">No opportunities match your filters.</div>';
+    }
+
+    if (isFreeUser) {
+        html += '<div class="terminal-upsell">Subscribe to Terminal to unlock all trades, filters, and consultations.</div>';
+    }
+
+    body.innerHTML = html;
+
+    // Store only visible trades for row click popups
+    const filteredRef = {};
+    if (isFreeUser) {
+        // Only indices 2 and 3 are visible (unblurred)
+        if (filtered[2]) filteredRef[2] = filtered[2];
+        if (filtered[3]) filteredRef[3] = filtered[3];
+        // Scrub all in-memory data — console/DevTools access is useless
+        terminalArbData = [];
+        terminalCityTrades = {};
+        terminalPrefetchPromise = null;
+    } else {
+        for (let i = 0; i < filtered.length; i++) filteredRef[i] = filtered[i];
+    }
+
+    // Bind filter events (paid users only)
+    if (!isFreeUser) {
+        document.getElementById('termArbCity').addEventListener('change', e => {
+            terminalArbFilters.city = e.target.value;
+            terminalRenderArbitrage();
+        });
+        let matTimer;
+        document.getElementById('termArbMaterial').addEventListener('input', e => {
+            clearTimeout(matTimer);
+            matTimer = setTimeout(() => {
+                terminalArbFilters.material = e.target.value.trim();
+                terminalRenderArbitrage();
+            }, 300);
+        });
+        document.getElementById('termArbDiamond').addEventListener('click', e => {
+            terminalArbFilters.diamondStart = !terminalArbFilters.diamondStart;
+            terminalRenderArbitrage();
+        });
+        document.getElementById('termArbSameCity').addEventListener('click', e => {
+            terminalArbFilters.sameCity = !terminalArbFilters.sameCity;
+            terminalRenderArbitrage();
+        });
+        document.getElementById('termArbHideStale').addEventListener('click', e => {
+            terminalArbFilters.hideStale = !terminalArbFilters.hideStale;
+            terminalRenderArbitrage();
+        });
+        document.getElementById('termArbStaleHours').addEventListener('change', e => {
+            terminalArbFilters.staleHours = parseInt(e.target.value);
+            terminalArbFilters.hideStale = true;
+            terminalRenderArbitrage();
+        });
+        document.getElementById('termArbMaxDist').addEventListener('click', e => {
+            terminalArbFilters.maxDist = !terminalArbFilters.maxDist;
+            terminalRenderArbitrage();
+        });
+        document.getElementById('termArbMaxDistBlocks').addEventListener('change', e => {
+            terminalArbFilters.maxDistBlocks = parseInt(e.target.value);
+            terminalArbFilters.maxDist = true;
+            terminalRenderArbitrage();
+        });
+    }
+
+    // Bind sort headers
+    body.querySelectorAll('.terminal-sort-th').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.sort;
+            if (terminalArbSort.col === col) {
+                terminalArbSort.dir = terminalArbSort.dir === 'desc' ? 'asc' : 'desc';
+            } else {
+                terminalArbSort.col = col;
+                terminalArbSort.dir = 'desc';
+            }
+            terminalRenderArbitrage();
+        });
+    });
+
+    // Bind flag buttons
+    body.querySelectorAll('.terminal-flag-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const route = btn.dataset.route;
+            const buy = btn.dataset.buy;
+            const sell = btn.dataset.sell;
+            const reason = prompt('Flag this route \u2014 what\'s wrong?\n(e.g. "out of stock", "wrong price", "chest broken")');
+            if (!reason) return;
+            btn.textContent = '...';
+            btn.disabled = true;
+            try {
+                await fetch(CONFIG.supabaseUrl + '/rest/v1/nc_terminal_flags', {
+                    method: 'POST',
+                    headers: restHeaders(),
+                    body: JSON.stringify({
+                        user_id: currentUser.id,
+                        username: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Unknown',
+                        route, buy_coords: buy, sell_coords: sell, reason
+                    })
+                });
+                btn.textContent = '\u2691';
+                btn.classList.add('flagged');
+                btn.title = 'Flagged: ' + reason;
+            } catch (err) {
+                console.error('Flag failed:', err);
+                btn.textContent = '\u2691';
+                btn.disabled = false;
+            }
+        });
+    });
+
+    // Bind row click → trade detail popup
+    body.querySelectorAll('.terminal-row-clickable').forEach(row => {
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('.terminal-flag-btn') || e.target.closest('.terminal-clickable-coords')) return;
+            const idx = parseInt(row.dataset.arbIdx);
+            const c = filteredRef[idx];
+            if (!c) return;
+            const inName = c.t1.inputMat.replace(/_/g, ' ');
+            const midName = c.t1.outputMat.replace(/_/g, ' ');
+            const buyCoords = c.t1.pos.x + ', ' + c.t1.pos.y + ', ' + c.t1.pos.z;
+            const sellCoords = c.t2.pos.x + ', ' + c.t2.pos.y + ', ' + c.t2.pos.z;
+            const existing = document.getElementById('terminalTradePopup');
+            if (existing) existing.remove();
+            const popup = document.createElement('div');
+            popup.id = 'terminalTradePopup';
+            popup.className = 'terminal-trade-popup';
+            popup.innerHTML = '<div class="terminal-trade-popup-inner">'
+                + '<button class="terminal-trade-popup-close">&times;</button>'
+                + '<h3>Trade Route</h3>'
+                + '<p>To complete this trade, take <strong>' + ncEsc(inName) + '</strong> (' + c.spent + ') to <strong>' + ncEsc(c.t1.city) + '</strong> at '
+                + '<span class="terminal-clickable-coords" onclick="terminalCopyCoords(' + c.t1.pos.x + ',' + c.t1.pos.y + ',' + c.t1.pos.z + ')" title="Click to copy">[' + buyCoords + ']</span>'
+                + ', exchange it for <strong>' + ncEsc(midName) + '</strong>.</p>'
+                + '<p>Then take the <strong>' + ncEsc(midName) + '</strong> to <strong>' + ncEsc(c.t2.city) + '</strong> at '
+                + '<span class="terminal-clickable-coords" onclick="terminalCopyCoords(' + c.t2.pos.x + ',' + c.t2.pos.y + ',' + c.t2.pos.z + ')" title="Click to copy">[' + sellCoords + ']</span>'
+                + ' and exchange for <strong>' + ncEsc(inName) + '</strong>.</p>'
+                + '<p>By doing this, you will have turned <strong>' + c.spent + ' ' + ncEsc(inName) + '</strong> into <strong>' + c.back + ' ' + ncEsc(inName) + '</strong> — a net profit of <strong>+' + c.netProfit + ' ' + ncEsc(inName) + '</strong>.</p>'
+                + '</div>';
+            document.body.appendChild(popup);
+            popup.querySelector('.terminal-trade-popup-close').addEventListener('click', () => popup.remove());
+            popup.addEventListener('click', (ev) => { if (ev.target === popup) popup.remove(); });
+        });
+    });
+}
+
+// ============================================
+// Terminal — Consultation Scheduler
+// ============================================
+
+function terminalOpenConsultation() {
+    const toolsEl = document.getElementById('terminalTools');
+    const panelEl = document.getElementById('terminalPanel');
+    toolsEl.style.display = 'none';
+    panelEl.style.display = '';
+    terminalCurrentTool = 'consult';
+    document.getElementById('terminalSubtitle').textContent = 'Consultation';
+    document.getElementById('terminalRefreshBtn').style.display = 'none';
+    terminalLoadConsultation();
+}
+
+async function terminalLoadConsultation() {
+    const body = document.getElementById('terminalPanelBody');
+    body.innerHTML = '<div class="terminal-loading">Loading...</div>';
+    try {
+        const consults = currentUser
+            ? await supabaseRest('nc_terminal_consultations', 'select=*&user_id=eq.' + currentUser.id + '&order=requested_date.desc')
+            : [];
+        const allConsults = currentUser
+            ? await supabaseRest('nc_terminal_consultations', 'select=requested_date,requested_time,status&status=neq.cancelled')
+            : [];
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const thisMonth = consults.filter(c => c.created_at >= monthStart && c.status !== 'cancelled');
+        const remaining = currentUser ? Math.max(0, 2 - thisMonth.length) : 0;
+
+        // Build set of reserved date+time slots
+        const reserved = new Set(allConsults.map(c => c.requested_date + '|' + c.requested_time));
+
+        let html = '<div class="terminal-consult-wrap">';
+        html += '<div class="terminal-consult-disclaimer">Maison Fris will make a good faith effort to reschedule if scheduling conflicts emerge.</div>';
+        const dateOpts = [];
+        for (let i = 2; i <= 14; i++) {
+            const d = new Date(now.getTime() + i * 86400000);
+            dateOpts.push('<option value="' + d.toISOString().split('T')[0] + '">' + d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + '</option>');
+        }
+        html += '<div class="terminal-consult-form">';
+        html += '<div><label>Preferred Date</label><select id="termConsultDate">' + dateOpts.join('') + '</select></div>';
+        html += '<div><label>Preferred Time (US-Central)</label><select id="termConsultTime"></select></div>';
+        html += '<div><label>Topic</label><select id="termConsultTopic"><option value="Market Strategy">Market Strategy</option><option value="Arbitrage Guidance">Arbitrage Guidance</option><option value="Shop Setup">Shop Setup &amp; Pricing</option><option value="Trade Routes">Trade Route Planning</option><option value="Other">Other</option></select></div>';
+        html += '<div><label>Notes (optional)</label><textarea id="termConsultNotes" placeholder="Describe what you\'d like to discuss..."></textarea></div>';
+        if (!userProfile?.terminal) {
+            html += '<button class="terminal-consult-submit" disabled>Contact Directly</button>';
+        } else if (remaining > 0) {
+            html += '<button class="terminal-consult-submit" id="termConsultSubmit">Request Consultation</button>';
+        } else {
+            html += '<button class="terminal-consult-submit" disabled>Contact Directly</button>';
+        }
+        html += '</div>';
+        if (consults.length > 0) {
+            html += '<div class="terminal-consult-history"><h4>Your Consultations</h4>';
+            for (const c of consults) {
+                const dateStr = new Date(c.requested_date + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                html += '<div class="terminal-consult-row"><div><div style="font-weight:600;">' + ncEsc(c.topic) + '</div>';
+                html += '<div style="color:var(--text-muted);font-size:0.65rem;">' + dateStr + ' at ' + c.requested_time + (c.notes ? ' &middot; ' + ncEsc(c.notes.substring(0, 60)) : '') + '</div></div>';
+                html += '<span class="terminal-consult-status ' + c.status + '">' + c.status + '</span></div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+
+        // Populate time slots based on selected date, filtering out reserved
+        function updateTimeSlots() {
+            const dateSel = document.getElementById('termConsultDate');
+            const timeSel = document.getElementById('termConsultTime');
+            if (!dateSel || !timeSel) return;
+            const date = dateSel.value;
+            timeSel.innerHTML = '';
+            let hasOptions = false;
+            for (let h = 9; h <= 21; h++) {
+                const val = (h < 10 ? '0' : '') + h + ':00 CT';
+                if (reserved.has(date + '|' + val)) continue;
+                const label = (h > 12 ? (h - 12) : h) + ':00 ' + (h >= 12 ? 'PM' : 'AM') + ' CT';
+                timeSel.innerHTML += '<option value="' + val + '">' + label + '</option>';
+                hasOptions = true;
+            }
+            if (!hasOptions) {
+                timeSel.innerHTML = '<option value="" disabled selected>No availability</option>';
+            }
+            const submitBtn = document.getElementById('termConsultSubmit');
+            if (submitBtn) submitBtn.disabled = !hasOptions;
+        }
+        const dateSel = document.getElementById('termConsultDate');
+        if (dateSel) { dateSel.addEventListener('change', updateTimeSlots); updateTimeSlots(); }
+
+        const submitBtn = document.getElementById('termConsultSubmit');
+        if (submitBtn) submitBtn.addEventListener('click', async () => {
+            submitBtn.disabled = true; submitBtn.textContent = 'Submitting...';
+            try {
+                const resp = await fetch(CONFIG.workerUrl + '/api/consultation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('mf_token') },
+                    body: JSON.stringify({
+                        requested_date: document.getElementById('termConsultDate').value,
+                        requested_time: document.getElementById('termConsultTime').value,
+                        topic: document.getElementById('termConsultTopic').value,
+                        notes: document.getElementById('termConsultNotes').value.trim() || null
+                    })
+                });
+                if (!resp.ok) throw new Error((await resp.json()).error || 'Submission failed');
+                terminalLoadConsultation();
+            } catch (err) { console.error('Consult submit error:', err); submitBtn.disabled = false; submitBtn.textContent = 'Request Consultation'; }
+        });
+    } catch (err) { console.error('Consult load error:', err); body.innerHTML = '<div class="terminal-loading">Failed to load consultations.</div>'; }
+}
+
+// ============================================
+// Terminal Admin — Management Dashboard
+// ============================================
+let termAdminTab = 'flags';
+
+async function loadTerminalAdmin() {
+    termAdminTab = 'flags';
+    renderTermAdminTabs();
+    loadTermAdminFlags();
+
+    // Tab switching
+    document.querySelectorAll('.term-admin-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            termAdminTab = tab.dataset.tab;
+            renderTermAdminTabs();
+            if (termAdminTab === 'flags') loadTermAdminFlags();
+            else if (termAdminTab === 'carts') loadTermAdminCarts();
+            else if (termAdminTab === 'consults') loadTermAdminConsults();
+        });
+    });
+
+    // Search
+    const search = document.getElementById('termAdminSearch');
+    if (search) {
+        search.addEventListener('input', () => {
+            if (termAdminTab === 'flags') loadTermAdminFlags();
+            else if (termAdminTab === 'carts') loadTermAdminCarts();
+            else if (termAdminTab === 'consults') loadTermAdminConsults();
+        });
+    }
+}
+
+function renderTermAdminTabs() {
+    document.querySelectorAll('.term-admin-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === termAdminTab);
+    });
+}
+
+async function loadTermAdminFlags() {
+    const content = document.getElementById('termAdminContent');
+    if (!content) return;
+    content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Loading flags...</div>';
+
+    try {
+        const flags = await supabaseRest('nc_terminal_flags', 'select=*&order=created_at.desc');
+        const q = (document.getElementById('termAdminSearch')?.value || '').toLowerCase().trim();
+        const filtered = flags.filter(f => {
+            if (!q) return true;
+            return [f.username, f.route, f.buy_coords, f.sell_coords, f.reason]
+                .filter(Boolean).join(' ').toLowerCase().includes(q);
+        });
+
+        if (filtered.length === 0) {
+            content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">No flags found.</div>';
+            return;
+        }
+
+        content.innerHTML = '';
+        filtered.forEach(f => {
+            const row = document.createElement('div');
+            row.className = 'term-admin-row';
+            const route = (f.route || '').replace(/\|/g, ' \u2192 ').replace(/_/g, ' ');
+            const when = f.created_at ? new Date(f.created_at).toLocaleString() : '';
+            row.innerHTML = `
+                <div class="term-admin-row-info">
+                    <div><strong>${ncEsc(f.username || 'Unknown')}</strong> flagged: ${ncEsc(route)}</div>
+                    <div class="term-admin-row-reason">"${ncEsc(f.reason || '')}"</div>
+                    <div class="term-admin-row-meta">Buy: ${ncEsc(f.buy_coords || '')} &middot; Sell: ${ncEsc(f.sell_coords || '')} &middot; ${when}</div>
+                </div>
+                <button class="term-admin-delete" data-id="${f.id}" title="Dismiss flag">&times;</button>
+            `;
+            row.querySelector('.term-admin-delete').addEventListener('click', async (e) => {
+                const btn = e.currentTarget;
+                btn.textContent = '...';
+                try {
+                    await fetch(CONFIG.supabaseUrl + '/rest/v1/nc_terminal_flags?id=eq.' + f.id, {
+                        method: 'DELETE', headers: restHeaders()
+                    });
+                    row.remove();
+                } catch (err) {
+                    console.error('Delete flag failed:', err);
+                    btn.textContent = '\u00d7';
+                }
+            });
+            content.appendChild(row);
+        });
+    } catch (err) {
+        console.error('Load flags failed:', err);
+        content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Failed to load flags.</div>';
+    }
+}
+
+async function loadTermAdminCarts() {
+    const content = document.getElementById('termAdminContent');
+    if (!content) return;
+    content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Loading saved carts...</div>';
+
+    try {
+        const deals = await supabaseRest('nc_saved_deals', 'select=*,profiles(discord_username,minecraft_ign)&order=saved_at.desc');
+        const q = (document.getElementById('termAdminSearch')?.value || '').toLowerCase().trim();
+
+        // Group by user
+        const byUser = {};
+        for (const d of deals) {
+            const uid = d.user_id;
+            if (!byUser[uid]) {
+                const profile = d.profiles || {};
+                byUser[uid] = {
+                    username: profile.discord_username || 'Unknown',
+                    ign: profile.minecraft_ign || '',
+                    deals: []
+                };
+            }
+            byUser[uid].deals.push(d);
+        }
+
+        const users = Object.entries(byUser).filter(([uid, u]) => {
+            if (!q) return true;
+            const text = [u.username, u.ign, ...u.deals.map(d => d.deal_key)].join(' ').toLowerCase();
+            return text.includes(q);
+        });
+
+        if (users.length === 0) {
+            content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">No saved carts found.</div>';
+            return;
+        }
+
+        content.innerHTML = '';
+        for (const [uid, u] of users) {
+            const row = document.createElement('div');
+            row.className = 'term-admin-row';
+            const dealList = u.deals.map(d => {
+                const parts = d.deal_key.split('|');
+                const coords = parts[0] || '';
+                const inMat = (parts[1] || '').replace(/_/g, ' ');
+                const outMat = (parts[2] || '').replace(/_/g, ' ');
+                return '<div style="font-size:0.65rem;color:var(--text-muted);">' +
+                    ncEsc(inMat) + ' \u2192 ' + ncEsc(outMat) +
+                    ' <span style="opacity:0.6;">x' + (d.quantity || 1) + ' [' + ncEsc(coords) + ']</span></div>';
+            }).join('');
+            row.innerHTML = `
+                <div class="term-admin-row-info">
+                    <div><strong>${ncEsc(u.username)}</strong>${u.ign ? ' <span style="color:var(--text-muted);font-size:0.65rem;">(' + ncEsc(u.ign) + ')</span>' : ''} &mdash; ${u.deals.length} deals</div>
+                    ${dealList}
+                </div>
+            `;
+            content.appendChild(row);
+        }
+    } catch (err) {
+        console.error('Load carts failed:', err);
+        content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Failed to load saved carts.</div>';
+    }
+}
+
+async function loadTermAdminConsults() {
+    const content = document.getElementById('termAdminContent');
+    if (!content) return;
+    content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Loading consultations...</div>';
+    try {
+        const consults = await supabaseRest('nc_terminal_consultations', 'select=*&order=created_at.desc');
+        const q = (document.getElementById('termAdminSearch')?.value || '').toLowerCase().trim();
+        const filtered = consults.filter(c => {
+            if (!q) return true;
+            return [c.username, c.topic, c.requested_date, c.requested_time, c.notes, c.status]
+                .filter(Boolean).join(' ').toLowerCase().includes(q);
+        });
+        if (filtered.length === 0) {
+            content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">No consultations found.</div>';
+            return;
+        }
+        let html = '';
+        for (const c of filtered) {
+            const dateStr = new Date(c.requested_date + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            html += '<div class="term-admin-row" style="display:flex;justify-content:space-between;align-items:center;">';
+            html += '<div style="flex:1;min-width:0;">';
+            html += '<div style="font-weight:600;font-size:0.8rem;">' + ncEsc(c.username) + ' &mdash; ' + ncEsc(c.topic) + '</div>';
+            html += '<div style="font-size:0.65rem;color:var(--text-muted);">' + dateStr + ' at ' + c.requested_time + ' UTC' + (c.notes ? ' &middot; ' + ncEsc(c.notes.substring(0, 80)) : '') + '</div>';
+            html += '</div>';
+            html += '<div style="display:flex;align-items:center;gap:0.4rem;">';
+            html += '<select class="term-admin-status-select" data-id="' + c.id + '" style="font-size:0.65rem;padding:0.15rem 0.3rem;background:rgba(255,255,255,0.06);border:1px solid rgba(184,180,204,0.2);border-radius:3px;color:var(--text);">';
+            ['pending', 'confirmed', 'completed', 'cancelled'].forEach(s => {
+                html += '<option value="' + s + '"' + (c.status === s ? ' selected' : '') + '>' + s + '</option>';
+            });
+            html += '</select>';
+            html += '<button class="term-admin-delete" data-id="' + c.id + '" title="Delete">&times;</button>';
+            html += '</div></div>';
+        }
+        content.innerHTML = html;
+
+        // Status change handlers
+        content.querySelectorAll('.term-admin-status-select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                try {
+                    await fetch(CONFIG.supabaseUrl + '/rest/v1/nc_terminal_consultations?id=eq.' + sel.dataset.id, {
+                        method: 'PATCH', headers: restHeaders(), body: JSON.stringify({ status: sel.value })
+                    });
+                } catch (err) { console.error('Status update failed:', err); }
+            });
+        });
+        // Delete handlers
+        content.querySelectorAll('.term-admin-delete').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('Delete this consultation?')) return;
+                try {
+                    await fetch(CONFIG.supabaseUrl + '/rest/v1/nc_terminal_consultations?id=eq.' + btn.dataset.id, {
+                        method: 'DELETE', headers: restHeaders()
+                    });
+                    loadTermAdminConsults();
+                } catch (err) { console.error('Delete failed:', err); }
+            });
+        });
+    } catch (err) {
+        console.error('Load consults failed:', err);
+        content.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.8rem;">Failed to load consultations.</div>';
+    }
 }
