@@ -39,7 +39,7 @@ async function loadNewCallisto() {
     L.imageOverlay('nc-terrain.jpg', ncBounds).addTo(ncMap);
 
     // Center on New Callisto — lat = -minecraft_z, lng = minecraft_x
-    ncMap.setView([-8168, -3163], -1);
+    ncMap.setView([-8227, -3268], 0);
 
     // Live coordinate display on hover
     const coordsEl = document.getElementById('ncCoords');
@@ -233,6 +233,18 @@ async function loadNewCallisto() {
                 });
             });
         }
+
+        // --- Click shop row → navigate to shop mode ---
+        container.querySelectorAll('.nc-shop-link-goto').forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', () => {
+                const row = el.closest('.nc-shop-link-row');
+                if (!row) return;
+                const sx = parseInt(row.dataset.shopX), sy = parseInt(row.dataset.shopY), sz = parseInt(row.dataset.shopZ);
+                ncMap.closePopup();
+                if (typeof ncGoToShop === 'function') ncGoToShop(sx, sy, sz);
+            });
+        });
 
         // --- Log buttons (all users) ---
         const txnBtn = container.querySelector('.nc-popup-txn-btn');
@@ -638,14 +650,20 @@ function buildPopupHTML(prop, canEdit, pi) {
             const stockedCount = shop.exchanges.filter(e => e.stock > 0).length;
             const distStr = Math.round(shop.dist);
             const stateClass = isConfirmed ? 'confirmed' : isDismissed ? 'dismissed' : 'suggested';
-            h += `<div class="nc-shop-link-row ${stateClass}" data-shop-key="${key}" data-pi="${pi}">`;
-            h += `<div class="nc-shop-link-info">`;
-            h += `<span class="nc-shop-link-trades">${tradeCount} trade${tradeCount !== 1 ? 's' : ''}</span>`;
+            // Build compact trade summary (input → output for each exchange)
+            const tradeSummary = shop.exchanges.map(ex => {
+                const inName = (ex.input?.customName || ex.input?.material || '?').replace(/_/g, ' ');
+                const outName = (ex.output?.customName || ex.output?.material || '?').replace(/_/g, ' ');
+                return `<span class="nc-shop-link-trade-detail">${ncEsc(inName)} &rarr; ${ncEsc(outName)}</span>`;
+            }).join('');
+            h += `<div class="nc-shop-link-row ${stateClass}" data-shop-key="${key}" data-pi="${pi}" data-shop-x="${shop.pos.x}" data-shop-y="${shop.pos.y}" data-shop-z="${shop.pos.z}">`;
+            h += `<div class="nc-shop-link-info nc-shop-link-goto" title="View in Shop Explorer">`;
+            h += `<div class="nc-shop-link-trades-col">${tradeSummary}<span class="nc-shop-link-trades">${tradeCount} trade${tradeCount !== 1 ? 's' : ''}</span></div>`;
             h += `<span class="nc-shop-link-stock">${stockedCount} in stock</span>`;
             h += `<span class="nc-shop-link-dist">${distStr}m</span>`;
             h += `<span class="nc-shop-link-coords">${shop.pos.x}, ${shop.pos.z}</span>`;
             h += `</div>`;
-            if (canEdit) {
+            if (canEdit && typeof ncShopMode !== 'undefined' && ncShopMode) {
                 if (isConfirmed) {
                     h += `<button class="nc-shop-link-btn unlink" data-action="unlink" data-key="${key}" data-pi="${pi}">&#10005;</button>`;
                 } else if (isDismissed) {
@@ -697,7 +715,7 @@ function renderNCMarkers(properties) {
             permanent: ncLabelsVisible
         });
 
-        marker.bindPopup(buildPopupHTML(prop, ncCanEdit(), pi), { maxWidth: 580, minWidth: 440, autoPan: false, className: 'nc-leaflet-popup' });
+        marker.bindPopup(buildPopupHTML(prop, (typeof ncSurveyMode !== 'undefined' ? ncSurveyMode : true) && ncCanEdit(), pi), { maxWidth: 580, minWidth: 440, autoPan: false, className: 'nc-leaflet-popup' });
         marker._ncData = prop;
         marker._ncIndex = pi;
         ncMarkers.push(marker);
@@ -768,7 +786,7 @@ function highlightNCProperty(index, card) {
     }
     document.querySelectorAll('.nc-panel-card.active').forEach(c => c.classList.remove('active'));
 
-    const marker = ncMarkers[index];
+    const marker = ncMarkers.find(m => m._ncIndex === index);
     if (!marker) return;
 
     // Highlight card
@@ -894,7 +912,7 @@ function filterNCMarkers(query) {
         const match = !q || s.includes(q);
         if (match) {
             if (!ncMap.hasLayer(marker)) marker.addTo(ncMap);
-            visibleIndices.add(String(i));
+            visibleIndices.add(String(marker._ncIndex));
             visible++;
         } else {
             ncMap.removeLayer(marker);
