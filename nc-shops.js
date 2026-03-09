@@ -1535,7 +1535,7 @@ function loadTerminal() {
         <div class="terminal-tool-card terminal-tool-disabled" data-tool="oracle">
             <span class="terminal-ribbon">Coming Soon</span>
             <div class="terminal-tool-icon">&#x25C8;</div>
-            <h3>Oracle</h3>
+            <h3>Doug</h3>
             <p>Chat with an A.I. trained on live CivMC data.</p>
         </div>
     ` + (showGetTerminal ? '<div class="terminal-get-btn-wrap"><button class="terminal-get-btn" id="terminalGetBtn">Get Terminal</button></div>' : '');
