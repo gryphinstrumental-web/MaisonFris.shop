@@ -4,7 +4,7 @@
 
 const ANLYS_DB_NAME = 'mf_analysis';
 const ANLYS_DB_VERSION = 1;
-const ANLYS_AUTO_INTERVAL = 60 * 60 * 1000; // 1 hour
+const ANLYS_AUTO_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const ANLYS_RETENTION_DAYS = 90;
 
 let anlysCurrentTab = 'snapshots';
@@ -220,11 +220,9 @@ async function analysisTakeSnapshot(statusEl) {
 
     if (statusEl) statusEl.textContent = 'Fetching Tradex data...';
 
-    const data = await tradexFetch({
-        pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
-        sortMode: 'closest', limit: 10000, allowUnstocked: true
-    });
-    const exchanges = data.exchanges || [];
+    // Use shared cache, force refresh to get fresh data
+    await tradexEnsureCache(true);
+    const exchanges = tradexGetCached();
 
     if (statusEl) statusEl.textContent = `Got ${exchanges.length} exchanges. Saving raw data...`;
 

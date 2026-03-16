@@ -38,6 +38,34 @@ async function tradexFetch(body, { retries = 3, baseDelay = 3000 } = {}) {
 }
 
 // ============================================
+// Shared Tradex Data Cache
+// ============================================
+let tradexCachedExchanges = [];   // full dataset from last fetch
+let tradexCacheTime = 0;          // timestamp of last fetch
+const TRADEX_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+async function tradexEnsureCache(force) {
+    if (!force && tradexCachedExchanges.length && (Date.now() - tradexCacheTime) < TRADEX_CACHE_TTL) return;
+    const data = await tradexFetch({
+        pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
+        sortMode: 'closest', limit: 10000, allowUnstocked: true
+    });
+    tradexCachedExchanges = data.exchanges || [];
+    tradexCacheTime = Date.now();
+    console.log(`[Tradex] Cached ${tradexCachedExchanges.length} exchanges`);
+}
+
+function tradexGetCached() { return tradexCachedExchanges; }
+function tradexGetStocked() { return tradexCachedExchanges.filter(e => e.stock > 0); }
+function tradexGetNC() {
+    return tradexCachedExchanges.filter(e => {
+        const p = e.pos;
+        return p.x >= NC_SHOP_BOUNDS.minX && p.x <= NC_SHOP_BOUNDS.maxX &&
+               p.z >= NC_SHOP_BOUNDS.minZ && p.z <= NC_SHOP_BOUNDS.maxZ;
+    });
+}
+
+// ============================================
 // Saved Deals (Supabase + localStorage fallback)
 // Key → quantity map
 // ============================================
@@ -186,18 +214,11 @@ function ncUpdateCartBadge() {
 // ============================================
 // Background Fetch & Proximity
 // ============================================
-async function ncEnsureShopData() {
-    if (ncShopDataReady) return;
+async function ncEnsureShopData(force) {
+    if (!force && ncShopDataReady) return;
     try {
-        const data = await tradexFetch({
-            pos: { server: 'play.civmc.net', world: 'overworld', x: NC_SHOP_CENTER.x, y: 64, z: NC_SHOP_CENTER.z },
-            sortMode: 'closest', limit: 500, allowUnstocked: true
-        });
-        ncShopExchanges = (data.exchanges || []).filter(e => {
-            const p = e.pos;
-            return p.x >= NC_SHOP_BOUNDS.minX && p.x <= NC_SHOP_BOUNDS.maxX &&
-                   p.z >= NC_SHOP_BOUNDS.minZ && p.z <= NC_SHOP_BOUNDS.maxZ;
-        });
+        await tradexEnsureCache(force);
+        ncShopExchanges = tradexGetNC();
         ncShopDataReady = true;
         ncUpdateCartBadge();
     } catch (err) {
@@ -1791,11 +1812,8 @@ function terminalCopyCoords(x, y, z) {
 async function terminalFetchArbitrage() {
     // Ensure custom cities are loaded before city assignment
     if (!terminalCustomCitiesLoaded) await terminalLoadCustomCities();
-    const data = await tradexFetch({
-        pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
-        sortMode: 'closest', limit: 10000, allowUnstocked: false
-    });
-    const allExchanges = data.exchanges || [];
+    await tradexEnsureCache();
+    const allExchanges = tradexGetStocked();
     terminalTotalExchanges = allExchanges.length;
 
     // Assign each trade to closest city, accounting for compacted items + enchantments
@@ -1870,6 +1888,7 @@ async function loadTerminalArbitrage(forceRefresh) {
     body.innerHTML = '<div class="terminal-loading">Scanning markets...</div>';
     try {
         await _terminalGate.verify();
+        if (forceRefresh) tradexCacheTime = 0; // invalidate shared cache
         if (forceRefresh || !terminalArbData.length) await terminalFetchArbitrage();
         terminalRenderArbitrage();
     } catch (err) {
@@ -2729,11 +2748,8 @@ function worldMapShowAddCityPopup(latlng, mcX, mcZ) {
 
 async function worldMapFetchData() {
     try {
-        const data = await tradexFetch({
-            pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
-            sortMode: 'closest', limit: 10000, allowUnstocked: true
-        });
-        worldMapExchanges = data.exchanges || [];
+        await tradexEnsureCache();
+        worldMapExchanges = tradexGetCached();
         worldMapDataReady = true;
     } catch (err) {
         console.error('World map fetch failed:', err);
