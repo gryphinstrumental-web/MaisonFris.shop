@@ -14,9 +14,9 @@ let anlysCommodityData = [];    // latest snapshot's trade prices
 let anlysSortCol = 'commodity';
 let anlysSortAsc = true;
 
-// Diamond-type materials for price normalization
-const DIAMOND_TYPES = { DIAMOND: 1, DIAMOND_BLOCK: 9 };
-const BLOCK_MULTIPLIERS = { DIAMOND_BLOCK: 9, IRON_BLOCK: 9, GOLD_BLOCK: 9, EMERALD_BLOCK: 9, LAPIS_BLOCK: 9, REDSTONE_BLOCK: 9, COPPER_BLOCK: 9 };
+// Diamond-type materials for price normalization (Tradex uses title-case names)
+const DIAMOND_TYPES = { 'Diamond': 1, 'Diamond Block': 9 };
+const BLOCK_MULTIPLIERS = { 'Diamond Block': 9, 'Iron Block': 9, 'Gold Block': 9, 'Emerald Block': 9, 'Lapis Lazuli Block': 9, 'Redstone Block': 9, 'Copper Block': 9 };
 
 // ============================================
 // IndexedDB Helpers
@@ -106,12 +106,12 @@ function anlysEffectiveCount(item) {
 function anlysDiamondCount(item) {
     if (!item) return null;
     const mat = item.material;
-    if (mat === 'DIAMOND') {
+    if (mat === 'Diamond') {
         let c = item.count || 1;
         if (ncIsCompacted(item)) c *= 64;
         return c;
     }
-    if (mat === 'DIAMOND_BLOCK') {
+    if (mat === 'Diamond Block') {
         let c = (item.count || 1) * 9;
         if (ncIsCompacted(item)) c *= 64;
         return c;
@@ -120,7 +120,7 @@ function anlysDiamondCount(item) {
 }
 
 function anlysIsDiamond(mat) {
-    return mat === 'DIAMOND' || mat === 'DIAMOND_BLOCK';
+    return mat === 'Diamond' || mat === 'Diamond Block';
 }
 
 function anlysCommodityKey(item) {
