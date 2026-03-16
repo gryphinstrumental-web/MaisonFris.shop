@@ -164,6 +164,16 @@ function navigate() {
         document.getElementById('terminalAdminView').classList.add('active');
         document.body.classList.remove('landing');
         if (typeof loadTerminalAdmin === 'function') loadTerminalAdmin();
+    } else if (path === '/analysis') {
+        if (!currentUser || !isAdmin) {
+            history.replaceState(null, '', '/home');
+            document.getElementById('landingView').classList.add('active');
+            document.body.classList.add('landing');
+            return;
+        }
+        document.getElementById('analysisView').classList.add('active');
+        document.body.classList.remove('landing');
+        if (typeof loadAnalysis === 'function') loadAnalysis();
     } else if (path === '/home') {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
@@ -232,6 +242,10 @@ function updateAuthUI() {
     // Show/hide terminal admin nav link (admin only)
     const terminalAdminLink = document.getElementById('terminalAdminLink');
     if (terminalAdminLink) terminalAdminLink.style.display = isAdmin ? '' : 'none';
+
+    // Show/hide analysis nav link (admin only)
+    const analysisLink = document.getElementById('analysisLink');
+    if (analysisLink) analysisLink.style.display = isAdmin ? '' : 'none';
 }
 
 function toggleAdminView() {

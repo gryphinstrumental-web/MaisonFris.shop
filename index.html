@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maíson Fris — Luxury and Customs</title>
     <meta name="description" content="Maison Fris — Luxury and Customs on CivMC">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; img-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co https://cdn.discordapp.com data: blob:; connect-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co wss://ubuypxqueqxvugstmtkx.supabase.co https://maisonfris-auth.maisonfris.workers.dev https://api.tradex.civinfo.net https://raw.githubusercontent.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; img-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co https://cdn.discordapp.com https://civmc-map.duckdns.org data: blob:; connect-src 'self' https://ubuypxqueqxvugstmtkx.supabase.co wss://ubuypxqueqxvugstmtkx.supabase.co https://maisonfris-auth.maisonfris.workers.dev https://api.tradex.civinfo.net https://raw.githubusercontent.com;">
     <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="pragma" content="no-cache">
     <link rel="icon" type="image/png" href="2.png">
@@ -3867,12 +3867,188 @@
             border-color: rgba(212, 160, 160, 0.4);
             background: rgba(212, 160, 160, 0.1);
         }
+        /* World Map Tool */
+        .terminal-worldmap-active { max-width: calc(100vw - 4rem) !important; }
+        #worldMapContainer {
+            width: 100%; height: 70vh; min-height: 400px;
+            border-radius: 8px; border: 1px solid rgba(184,180,204,0.15); background: #1a1730;
+        }
+        .worldmap-filter-bar {
+            display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+            margin-bottom: 0.75rem; padding: 0.5rem 0;
+        }
+        #worldMapWrap:fullscreen .worldmap-filter-bar {
+            position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
+            margin: 0; padding: 0.6rem 1rem;
+            background: rgba(26,23,48,0.92); backdrop-filter: blur(6px);
+            border-bottom: 1px solid rgba(184,180,204,0.15);
+        }
+        #worldMapWrap:fullscreen #worldMapContainer { padding-top: 42px; }
+        .worldmap-filter-bar input,
+        .worldmap-filter-bar select {
+            font-family: 'Raleway', sans-serif; font-size: 0.7rem; letter-spacing: 0.05em;
+            color: var(--text); background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(184,180,204,0.2); border-radius: 4px; padding: 0.35rem 0.6rem;
+        }
+        .worldmap-filter-bar input:focus,
+        .worldmap-filter-bar select:focus { outline: none; border-color: var(--accent); }
+        .worldmap-filter-bar label {
+            font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer;
+        }
+        .worldmap-filter-bar select option { background: #2a2640; color: var(--text); }
+        .worldmap-stats {
+            font-size: 0.65rem; color: var(--text-muted); text-align: right; padding: 0.3rem 0;
+        }
+        #worldMapContainer .leaflet-popup-content-wrapper {
+            font-size: 14px !important; padding: 14px !important; min-width: 280px;
+        }
+        #worldMapContainer .leaflet-popup-content {
+            font-size: 14px !important; line-height: 1.6 !important;
+        }
+        #worldMapContainer .leaflet-popup-close-button {
+            font-size: 24px !important; padding: 6px 10px !important;
+        }
+        .worldmap-city-label {
+            font-family: 'Cormorant Garamond', serif; font-size: 13px; font-weight: 600;
+            color: rgba(240,238,244,0.85); text-shadow: 0 0 6px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.7);
+            white-space: nowrap; pointer-events: none;
+        }
+        .worldmap-city-custom {
+            pointer-events: auto; cursor: context-menu;
+        }
+        .worldmap-legend {
+            display: flex; gap: 1rem; align-items: center; font-size: 0.6rem; color: var(--text-muted); margin-top: 0.5rem;
+        }
+        .worldmap-legend-dot {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.2rem; vertical-align: middle;
+        }
+        .worldmap-tool-admin { border: 1px solid rgba(212,200,160,0.25) !important; }
+        .worldmap-tool-admin h3 { color: #d4c8a0 !important; }
+
+        /* World Map Table Overlay */
+        #worldmapTableOverlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(10,8,20,0.97); z-index: 10001;
+            flex-direction: column; padding: 1rem 1.5rem;
+        }
+        #worldmapTableOverlay.open { display: flex; }
+        .worldmap-table-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 0.75rem; border-bottom: 1px solid rgba(184,180,204,0.12);
+        }
+        .worldmap-table-header h3 {
+            font-family: 'Cormorant Garamond', serif; font-size: 1.2rem; font-weight: 600; color: var(--text); margin: 0;
+        }
+        .worldmap-table-close {
+            background: none; border: none; color: var(--text-muted); font-size: 1.6rem; cursor: pointer; padding: 0.2rem 0.5rem;
+        }
+        .worldmap-table-close:hover { color: var(--text); }
+        .worldmap-table-toolbar {
+            display: flex; gap: 0.4rem; flex-wrap: wrap; padding: 0.5rem 0;
+        }
+        .worldmap-table-wrap {
+            flex: 1; overflow: auto; margin-top: 0.5rem;
+        }
+        .worldmap-table-wrap table { width: 100%; }
+        .wm-filter-row th { padding: 0 0.4rem 0.4rem; }
+        .wm-filter-row input, .wm-filter-row select {
+            width: 100%; font-family: 'Raleway', sans-serif; font-size: 0.6rem;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(184,180,204,0.15);
+            border-radius: 3px; padding: 0.2rem 0.35rem; color: var(--text);
+        }
+        .wm-filter-row input:focus, .wm-filter-row select:focus { outline: none; border-color: var(--accent); }
+        .wm-filter-row select option { background: #2a2640; color: var(--text); }
+        .wm-row-unstocked { opacity: 0.5; }
+
+        /* World Map Table Button */
+        #worldmapTableBtn {
+            position: absolute; top: 0.5rem; right: 0.5rem; z-index: 500;
+            display: flex; align-items: center; justify-content: center;
+            width: 34px; height: 34px; border-radius: 6px;
+            background: rgba(26,23,48,0.85); border: 1px solid rgba(184,180,204,0.2);
+            color: var(--text-muted); cursor: pointer; backdrop-filter: blur(4px);
+        }
+        #worldmapTableBtn:hover { border-color: var(--accent); color: var(--text); }
+
         @media (max-width: 600px) {
             .terminal-container { padding: 1.5rem 1rem; }
             .terminal-arb-table { font-size: 0.65rem; }
             .terminal-arb-table th,
             .terminal-arb-table td { padding: 0.4rem; }
+            .terminal-worldmap-active { max-width: 100vw !important; padding: 0.5rem !important; }
+            #worldMapContainer { height: 50vh; min-height: 300px; }
         }
+        /* ============================================ */
+        /* Price Analysis                               */
+        /* ============================================ */
+        .anlys-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .anlys-tab {
+            font-family: 'Raleway', sans-serif; font-size: 0.7rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-muted); background: none;
+            border: 1px solid rgba(184, 180, 204, 0.2); border-radius: 4px;
+            padding: 0.45rem 1rem; cursor: pointer; transition: all 0.2s ease;
+        }
+        .anlys-tab:hover { border-color: var(--accent); color: var(--text); }
+        .anlys-tab.active { background: rgba(212, 200, 160, 0.15); border-color: rgba(212, 200, 160, 0.4); color: #d4c8a0; }
+
+        .anlys-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+        .anlys-btn {
+            font-family: 'Raleway', sans-serif; font-size: 0.7rem; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text); background: rgba(212, 200, 160, 0.15);
+            border: 1px solid rgba(212, 200, 160, 0.3); border-radius: 4px;
+            padding: 0.45rem 1rem; cursor: pointer; transition: all 0.2s ease;
+        }
+        .anlys-btn:hover { background: rgba(212, 200, 160, 0.25); border-color: rgba(212, 200, 160, 0.5); }
+        .anlys-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .anlys-btn.primary { background: rgba(212, 200, 160, 0.25); border-color: rgba(212, 200, 160, 0.5); }
+
+        .anlys-status { font-size: 0.75rem; color: var(--text-muted); }
+        .anlys-snapshot-list { display: flex; flex-direction: column; gap: 0.4rem; }
+        .anlys-snapshot-row {
+            display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.8rem;
+            border-radius: 6px; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(184, 180, 204, 0.1); font-size: 0.8rem;
+        }
+        .anlys-snapshot-row:hover { background: rgba(255,255,255,0.08); }
+        .anlys-snapshot-row .snap-time { flex: 1; color: var(--text); }
+        .anlys-snapshot-row .snap-stat { color: var(--text-muted); font-size: 0.75rem; margin-right: 0.5rem; }
+        .anlys-snapshot-row .snap-del { color: #c44; cursor: pointer; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .anlys-snapshot-row .snap-del:hover { color: #f66; }
+
+        .anlys-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .anlys-table th {
+            text-align: left; padding: 0.5rem; font-size: 0.65rem; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid rgba(184, 180, 204, 0.15);
+            cursor: pointer; user-select: none;
+        }
+        .anlys-table th:hover { color: var(--text); }
+        .anlys-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid rgba(184, 180, 204, 0.06); }
+        .anlys-table tr:hover td { background: rgba(255,255,255,0.04); }
+        .anlys-table .price-buy { color: #6c6; }
+        .anlys-table .price-sell { color: #c66; }
+        .anlys-table .price-barter { color: #cc6; }
+
+        .anlys-search { width: 100%; max-width: 400px; margin-bottom: 0.75rem; }
+        .anlys-filters { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+
+        .anlys-chart-wrap { position: relative; width: 100%; height: 300px; margin: 1rem 0; }
+        .anlys-chart-wrap canvas { width: 100%; height: 100%; }
+        .anlys-stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .anlys-stat-card {
+            flex: 1; min-width: 120px; padding: 0.6rem 0.8rem; border-radius: 6px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(184, 180, 204, 0.1);
+        }
+        .anlys-stat-card .stat-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+        .anlys-stat-card .stat-value { font-size: 1.1rem; color: var(--text); margin-top: 0.2rem; }
+        .anlys-loading { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+
+        .anlys-pair-select { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        .anlys-pair-select select, .anlys-pair-select input {
+            font-family: 'Raleway', sans-serif; font-size: 0.8rem; padding: 0.4rem 0.6rem;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(184, 180, 204, 0.2);
+            border-radius: 4px; color: var(--text);
+        }
+
     </style>
 </head>
 <body>
@@ -3895,6 +4071,7 @@
             <a href="/profile" id="profileLink" onclick="navigateTo('/profile'); return false;" style="display:none;">Profile</a>
             <a href="/usermanagement" id="userMgmtLink" onclick="navigateTo('/usermanagement'); return false;" style="display:none;">User Management</a>
             <a href="/terminal-admin" id="terminalAdminLink" onclick="navigateTo('/terminal-admin'); return false;" style="display:none;">Terminal Management</a>
+            <a href="/analysis" id="analysisLink" onclick="navigateTo('/analysis'); return false;" style="display:none;">Price Analysis</a>
         </nav>
         <div class="auth-bar" id="authBar">
             <button class="login-btn" id="loginBtn" onclick="loginWithDiscord()">Sign in</button>
@@ -3996,6 +4173,22 @@
                 <input type="text" class="um-search" id="termAdminSearch" placeholder="Search by user, material, or coords...">
             </div>
             <div id="termAdminContent" class="um-list"></div>
+        </div>
+    </div>
+
+    <!-- Price Analysis View (Admin only) -->
+    <div class="view" id="analysisView">
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <h1 class="terminal-title">Price Analysis</h1>
+                <p class="terminal-subtitle">Market Research</p>
+            </div>
+            <div class="anlys-tabs">
+                <button class="anlys-tab active" data-tab="snapshots">Snapshots</button>
+                <button class="anlys-tab" data-tab="commodities">Commodities</button>
+                <button class="anlys-tab" data-tab="history">Price History</button>
+            </div>
+            <div id="analysisContent"></div>
         </div>
     </div>
 
@@ -4388,11 +4581,12 @@
         </div>
     </div>
 
-    <script src="app.js?v=163"></script>
+    <script src="app.js?v=164"></script>
     <script src="nc-map.js?v=164"></script>
     <script src="nc-table.js?v=159"></script>
     <script src="nc-modals.js?v=159"></script>
-    <script src="nc-shops.js?v=176"></script>
+    <script src="nc-shops.js?v=182"></script>
+    <script src="analysis.js?v=1"></script>
     <script src="nc-init.js?v=159"></script>
 </body>
 </html>

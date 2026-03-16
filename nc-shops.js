@@ -17,6 +17,27 @@ const TRADEX_API = 'https://api.tradex.civinfo.net/exchanges/search';
 const NC_SHOP_LINK_RADIUS = 15;
 
 // ============================================
+// Tradex API Fetch with 429 Retry
+// ============================================
+async function tradexFetch(body, { retries = 3, baseDelay = 3000 } = {}) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        const resp = await fetch(TRADEX_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (resp.status === 429 && attempt < retries) {
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.warn(`Tradex 429 — retrying in ${delay / 1000}s (attempt ${attempt + 1}/${retries})`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+        }
+        if (!resp.ok) throw new Error('Tradex API ' + resp.status);
+        return resp.json();
+    }
+}
+
+// ============================================
 // Saved Deals (Supabase + localStorage fallback)
 // Key → quantity map
 // ============================================
@@ -168,18 +189,10 @@ function ncUpdateCartBadge() {
 async function ncEnsureShopData() {
     if (ncShopDataReady) return;
     try {
-        const resp = await fetch(TRADEX_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                pos: { server: 'play.civmc.net', world: 'overworld', x: NC_SHOP_CENTER.x, y: 64, z: NC_SHOP_CENTER.z },
-                sortMode: 'closest',
-                limit: 500,
-                allowUnstocked: true
-            })
+        const data = await tradexFetch({
+            pos: { server: 'play.civmc.net', world: 'overworld', x: NC_SHOP_CENTER.x, y: 64, z: NC_SHOP_CENTER.z },
+            sortMode: 'closest', limit: 500, allowUnstocked: true
         });
-        if (!resp.ok) throw new Error(`Tradex API ${resp.status}`);
-        const data = await resp.json();
         ncShopExchanges = (data.exchanges || []).filter(e => {
             const p = e.pos;
             return p.x >= NC_SHOP_BOUNDS.minX && p.x <= NC_SHOP_BOUNDS.maxX &&
@@ -1463,13 +1476,13 @@ function ncRenderCartPanel() {
 // Terminal — Market Intelligence Dashboard
 // ============================================
 const TERMINAL_CITIES = [
-    { name: 'New Callisto', x: -3163, z: 8168 },
-    { name: 'Pavia', x: 796, z: -3044 },
-    { name: 'Icenia', x: -3764, z: -4324 },
-    { name: 'Volterra', x: -1069, z: -1172 },
+    { name: 'New Callisto', x: -3272, z: 8100 },
+    { name: 'Pavia', x: 662, z: -3039 },
+    { name: 'Icenia', x: -3849, z: -4363 },
+    { name: 'Volterra', x: -1070, z: -1173 },
     { name: 'Danzilona', x: 5251, z: 4530 },
     { name: 'Shiroyama', x: 3367, z: 5045 },
-    { name: 'Kallopolis', x: -964, z: -3576 },
+    { name: 'Kallopolis', x: -961, z: -3552 },
     { name: 'Blue Cove', x: -9140, z: -404 },
     { name: 'Suramir', x: 1, z: -600 },
     { name: 'Shockton', x: -1603, z: -1137 },
@@ -1486,11 +1499,40 @@ const TERMINAL_CITIES = [
     { name: 'Groveheart', x: -5971, z: 5529 },
     { name: 'Regenburg', x: -3500, z: 8901 },
     { name: 'Florabis', x: -3350, z: 9244 },
-    { name: 'Mount Augusta', x: 3052, z: 2235 },
     { name: 'Lambat City', x: 3829, z: -1350 },
 ];
 
 let terminalCurrentTool = null;
+
+// --- World Map state ---
+let worldMap = null;
+let worldMapExchanges = [];
+let worldMapMarkers = [];
+let worldMapCityLabels = [];
+let worldMapDataReady = false;
+let worldMapFiltered = [];     // filtered exchanges for carousel
+let worldMapSelectedIdx = -1;  // selected carousel card index
+let worldMapTableSort = { col: 'city', asc: true };
+const worldMapColLabels = { city: 'City', coords: 'Coords', sellQty: 'Qty', selling: 'Output', buyQty: 'Qty', buyItem: 'Input', stock: 'Stock', age: 'Updated' };
+
+// --- Custom Cities (Supabase-persisted) ---
+let terminalCustomCities = [];
+let terminalCustomCitiesLoaded = false;
+
+async function terminalLoadCustomCities() {
+    try {
+        const rows = await supabaseRest('terminal_cities', 'select=id,name,x,z&order=name');
+        terminalCustomCities = rows.map(r => ({ id: r.id, name: r.name, x: r.x, z: r.z, _isCustom: true }));
+        terminalCustomCitiesLoaded = true;
+    } catch (e) {
+        console.warn('Failed to load custom cities:', e);
+        terminalCustomCitiesLoaded = true;
+    }
+}
+
+function terminalAllCities() {
+    return [...TERMINAL_CITIES, ...terminalCustomCities];
+}
 
 function loadTerminal() {
     const toolsEl = document.getElementById('terminalTools');
@@ -1538,7 +1580,14 @@ function loadTerminal() {
             <h3>Doug</h3>
             <p>Chat with an A.I. trained on live CivMC data.</p>
         </div>
-    ` + (showGetTerminal ? '<div class="terminal-get-btn-wrap"><button class="terminal-get-btn" id="terminalGetBtn">Get Terminal</button></div>' : '');
+    ` + (isAdmin ? `
+        <div class="terminal-tool-card worldmap-tool-admin" data-tool="worldmap">
+            <div class="terminal-tool-icon">&#x1F5FA;</div>
+            <h3>World Map</h3>
+            <p>Interactive map of all shop chests across CivMC. Admin tool.</p>
+        </div>
+    ` : '')
+    + (showGetTerminal ? '<div class="terminal-get-btn-wrap"><button class="terminal-get-btn" id="terminalGetBtn">Get Terminal</button></div>' : '');
 
     toolsEl.querySelectorAll('.terminal-tool-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -1546,6 +1595,7 @@ function loadTerminal() {
             const tool = card.dataset.tool;
             if (tool === 'arbitrage') terminalOpenArbitrage();
             if (tool === 'consult') terminalOpenConsultation();
+            if (tool === 'worldmap') terminalOpenWorldMap();
         });
     });
 
@@ -1587,6 +1637,11 @@ function loadTerminal() {
     });
 
     document.getElementById('terminalBackBtn').onclick = () => {
+        if (terminalCurrentTool === 'worldmap' && worldMap) {
+            worldMap.remove();
+            worldMap = null;
+        }
+        document.querySelector('.terminal-container')?.classList.remove('terminal-worldmap-active');
         panelEl.style.display = 'none';
         toolsEl.style.display = '';
         terminalCurrentTool = null;
@@ -1659,7 +1714,7 @@ async function terminalOpenArbitrage() {
     const refreshBtn = document.getElementById('terminalRefreshBtn');
     if (_terminalGate.isPaid) {
         refreshBtn.style.display = '';
-        refreshBtn.onclick = () => loadTerminalArbitrage();
+        refreshBtn.onclick = () => loadTerminalArbitrage(true);
     } else {
         refreshBtn.style.display = 'none';
     }
@@ -1709,7 +1764,7 @@ function terminalFreshClass(epochMs) {
 function terminalClosestCity(x, z) {
     let best = 'Unknown';
     let bestDist = Infinity;
-    for (const c of TERMINAL_CITIES) {
+    for (const c of terminalAllCities()) {
         const dx = x - c.x;
         const dz = z - c.z;
         const dist = dx * dx + dz * dz;
@@ -1734,16 +1789,12 @@ function terminalCopyCoords(x, y, z) {
 }
 
 async function terminalFetchArbitrage() {
-    const resp = await fetch(TRADEX_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
-            sortMode: 'closest', limit: 10000, allowUnstocked: false
-        })
+    // Ensure custom cities are loaded before city assignment
+    if (!terminalCustomCitiesLoaded) await terminalLoadCustomCities();
+    const data = await tradexFetch({
+        pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
+        sortMode: 'closest', limit: 10000, allowUnstocked: false
     });
-    if (!resp.ok) throw new Error('Tradex API ' + resp.status);
-    const data = await resp.json();
     const allExchanges = data.exchanges || [];
     terminalTotalExchanges = allExchanges.length;
 
@@ -1814,17 +1865,17 @@ async function terminalFetchArbitrage() {
     }
 }
 
-async function loadTerminalArbitrage() {
+async function loadTerminalArbitrage(forceRefresh) {
     const body = document.getElementById('terminalPanelBody');
     body.innerHTML = '<div class="terminal-loading">Scanning markets...</div>';
     try {
-        // Verify terminal status server-side each load (prevents console spoofing)
         await _terminalGate.verify();
-        await terminalFetchArbitrage();
+        if (forceRefresh || !terminalArbData.length) await terminalFetchArbitrage();
         terminalRenderArbitrage();
     } catch (err) {
         console.error('Terminal arbitrage error:', err);
-        body.innerHTML = '<div class="terminal-loading">Failed to fetch market data. Try refreshing.</div>';
+        const msg = err.message?.includes('429') ? 'Tradex API is rate-limited. Try again in a minute.' : 'Failed to fetch market data. Try refreshing.';
+        body.innerHTML = '<div class="terminal-loading">' + msg + '</div>';
     }
 }
 
@@ -1895,7 +1946,7 @@ function terminalRenderArbitrage() {
     const body = document.getElementById('terminalPanelBody');
 
     // Ticker
-    const cityNames = TERMINAL_CITIES.map(c => c.name).filter(n => terminalCityTrades[n]);
+    const cityNames = terminalAllCities().map(c => c.name).filter(n => terminalCityTrades[n]);
     const citySummary = cityNames.map(name => {
         const exs = terminalCityTrades[name] || [];
         const stocked = exs.filter(e => e.stock > 0).length;
@@ -1912,7 +1963,7 @@ function terminalRenderArbitrage() {
     const isFreeUser = !_terminalGate.isPaid;
 
     // Filter bar (hidden for free users)
-    const cityOpts = TERMINAL_CITIES.map(c => c.name).filter(n => terminalCityTrades[n]).sort()
+    const cityOpts = terminalAllCities().map(c => c.name).filter(n => terminalCityTrades[n]).sort()
         .map(n => '<option value="' + ncEsc(n) + '"' + (terminalArbFilters.city === n ? ' selected' : '') + '>' + ncEsc(n) + '</option>').join('');
 
     if (!isFreeUser) {
@@ -2271,6 +2322,695 @@ async function terminalLoadConsultation() {
 }
 
 // ============================================
+// ============================================
+// World Map Tool (Admin Only)
+// ============================================
+
+function worldMapMcToLatLng(x, z) {
+    return [-(z + 0.5), x + 0.5];
+}
+
+async function terminalOpenWorldMap() {
+    const toolsEl = document.getElementById('terminalTools');
+    const panelEl = document.getElementById('terminalPanel');
+    toolsEl.style.display = 'none';
+    panelEl.style.display = '';
+    terminalCurrentTool = 'worldmap';
+    document.getElementById('terminalSubtitle').textContent = 'World Map';
+    document.querySelector('.terminal-container')?.classList.add('terminal-worldmap-active');
+    document.getElementById('terminalRefreshBtn').style.display = 'none';
+
+    const body = document.getElementById('terminalPanelBody');
+    body.innerHTML = `
+        <div id="worldMapWrap" style="position:relative;">
+        <div class="worldmap-filter-bar">
+            <div style="display:flex;gap:0.4rem;flex:1;min-width:200px;">
+                <input type="text" id="worldmapSearchOutput" placeholder="Search Output..." style="flex:1;min-width:100px;">
+                <input type="text" id="worldmapSearchInput" placeholder="Search Input..." style="flex:1;min-width:100px;">
+            </div>
+            <button class="nc-shop-toggle" id="worldmapUnstocked">Show Unstocked</button>
+            <button class="nc-shop-toggle" id="worldmapExact">Filter Exact</button>
+            <select id="worldmapFreshness">
+                <option value="0" selected>All ages</option>
+                <option value="6">Updated &lt; 6h</option>
+                <option value="24">Updated &lt; 24h</option>
+                <option value="48">Updated &lt; 48h</option>
+                <option value="168">Updated &lt; 7d</option>
+            </select>
+        </div>
+        <div id="worldMapContainer"></div>
+        <button id="worldmapFullscreen" style="position:absolute;bottom:3.5rem;left:50%;transform:translateX(-50%);z-index:500;font-size:0.7rem;padding:0.3rem 0.8rem;background:rgba(26,23,48,0.85);border:1px solid rgba(184,180,204,0.2);border-radius:4px;color:var(--text);cursor:pointer;font-family:'Raleway',sans-serif;backdrop-filter:blur(4px);">&#x26F6; Fullscreen</button>
+        <div class="nc-panel" id="worldmapCarousel" style="display:none;">
+            <button class="nc-panel-arrow nc-panel-arrow-left" id="worldmapCarouselLeft">&#8249;</button>
+            <div class="nc-panel-list" id="worldmapCarouselList"></div>
+            <button class="nc-panel-arrow nc-panel-arrow-right" id="worldmapCarouselRight">&#8250;</button>
+        </div>
+        <button id="worldmapTableBtn" title="Spreadsheet View">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
+        <div class="worldmap-stats" id="worldmapStats"></div>
+        <div class="worldmap-legend">
+            <span><span class="worldmap-legend-dot" style="background:#4caf50;"></span> Stocked</span>
+            <span><span class="worldmap-legend-dot" style="background:#aa0000;"></span> Out of stock</span>
+            <span><span class="worldmap-legend-dot" style="background:#f5c542;"></span> Stale (&gt;48h)</span>
+        </div>
+        </div>
+        <div id="worldmapTableOverlay">
+            <div class="worldmap-table-header">
+                <h3>World Marketplace</h3>
+                <button class="worldmap-table-close" id="worldmapTableClose">&times;</button>
+            </div>
+            <div class="worldmap-table-toolbar">
+                <button class="nc-shop-toggle" id="wmTableClearFilters">Clear Filters</button>
+                <button class="nc-shop-toggle" id="wmTableUnstocked">Show Unstocked</button>
+                <button class="nc-shop-toggle" id="wmTableExact">Filter Exact</button>
+            </div>
+            <div class="worldmap-table-wrap">
+                <table class="nc-table" id="worldmapTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="city" style="white-space:nowrap;width:1%;">City</th>
+                            <th data-sort="coords" style="white-space:nowrap;width:1%;">Coords</th>
+                            <th data-sort="sellQty" style="white-space:nowrap;width:1%;">Qty</th>
+                            <th data-sort="selling" style="white-space:nowrap;width:1%;">Output</th>
+                            <th data-sort="buyQty" style="white-space:nowrap;width:1%;">Qty</th>
+                            <th data-sort="buyItem" style="white-space:nowrap;width:1%;">Input</th>
+                            <th data-sort="stock" style="white-space:nowrap;width:1%;">Stock</th>
+                            <th data-sort="age" style="white-space:nowrap;width:1%;">Updated</th>
+                        </tr>
+                        <tr class="wm-filter-row">
+                            <th><input type="text" class="wm-col-filter" data-col="city" placeholder="Filter..."></th>
+                            <th><input type="text" class="wm-col-filter" data-col="coords" placeholder="Filter..."></th>
+                            <th><input type="text" class="wm-col-filter" data-col="sellQty" placeholder="#"></th>
+                            <th><input type="text" class="wm-col-filter" data-col="selling" placeholder="Filter..."></th>
+                            <th><input type="text" class="wm-col-filter" data-col="buyQty" placeholder="#"></th>
+                            <th><input type="text" class="wm-col-filter" data-col="buyItem" placeholder="Filter..."></th>
+                            <th><input type="text" class="wm-col-filter" data-col="stock" placeholder="#"></th>
+                            <th><select class="wm-col-filter" id="wmDateFilter" data-col="age"><option value="">All</option><option value="1h">1h</option><option value="6h">6h</option><option value="24h">24h</option><option value="7d">7d</option><option value="30d">30d</option></select></th>
+                        </tr>
+                    </thead>
+                    <tbody id="worldmapTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    // Load custom cities before init
+    if (!terminalCustomCitiesLoaded) await terminalLoadCustomCities();
+
+    worldMapInit();
+
+    if (!worldMapDataReady) {
+        document.getElementById('worldmapStats').textContent = 'Fetching shop data...';
+        await worldMapFetchData();
+    }
+    worldMapRenderMarkers();
+
+    // Fullscreen toggle
+    document.getElementById('worldmapFullscreen').addEventListener('click', () => {
+        const wrap = document.getElementById('worldMapWrap');
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            wrap.requestFullscreen();
+        }
+    });
+    document.addEventListener('fullscreenchange', () => {
+        const container = document.getElementById('worldMapContainer');
+        const carousel = document.getElementById('worldmapCarousel');
+        const fsBtn = document.getElementById('worldmapFullscreen');
+        if (document.fullscreenElement) {
+            container.style.height = 'calc(100vh - 42px)';
+            document.getElementById('worldMapWrap').style.background = '#1a1730';
+            if (carousel) carousel.style.display = '';
+            if (fsBtn) fsBtn.style.display = 'none';
+        } else {
+            container.style.height = '70vh';
+            container.style.paddingTop = '';
+            document.getElementById('worldMapWrap').style.background = '';
+            if (carousel) carousel.style.display = 'none';
+            if (fsBtn) fsBtn.style.display = '';
+        }
+        if (worldMap) setTimeout(() => worldMap.invalidateSize(), 100);
+    });
+
+    // Search inputs — debounced
+    let searchTimeout;
+    const triggerFilter = () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(worldMapRenderMarkers, 200); };
+    document.getElementById('worldmapSearchOutput').addEventListener('input', triggerFilter);
+    document.getElementById('worldmapSearchInput').addEventListener('input', triggerFilter);
+    document.getElementById('worldmapFreshness').addEventListener('change', worldMapRenderMarkers);
+
+    // Toggle buttons (map-level)
+    document.getElementById('worldmapUnstocked').addEventListener('click', function() {
+        this.classList.toggle('active');
+        this.textContent = this.classList.contains('active') ? 'Hide Unstocked' : 'Show Unstocked';
+        worldMapRenderMarkers();
+    });
+    document.getElementById('worldmapExact').addEventListener('click', function() {
+        this.classList.toggle('active');
+        this.textContent = this.classList.contains('active') ? 'Filter All' : 'Filter Exact';
+        worldMapRenderMarkers();
+    });
+
+    // Carousel card click
+    document.getElementById('worldmapCarouselList').addEventListener('click', (ev) => {
+        const card = ev.target.closest('.nc-shop-card[data-wm-idx]');
+        if (card) worldMapSelectCard(parseInt(card.dataset.wmIdx));
+    });
+
+    // Carousel arrows
+    document.getElementById('worldmapCarouselLeft').addEventListener('click', () => {
+        const idx = worldMapSelectedIdx <= 0 ? worldMapFiltered.length - 1 : worldMapSelectedIdx - 1;
+        worldMapSelectCard(idx);
+    });
+    document.getElementById('worldmapCarouselRight').addEventListener('click', () => {
+        const idx = worldMapSelectedIdx >= worldMapFiltered.length - 1 ? 0 : worldMapSelectedIdx + 1;
+        worldMapSelectCard(idx);
+    });
+
+    // Keyboard arrows for carousel navigation
+    document.addEventListener('keydown', (ev) => {
+        if (terminalCurrentTool !== 'worldmap' || !document.fullscreenElement) return;
+        if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT' || ev.target.tagName === 'TEXTAREA') return;
+        if (ev.key === 'ArrowLeft') {
+            ev.preventDefault();
+            const idx = worldMapSelectedIdx <= 0 ? worldMapFiltered.length - 1 : worldMapSelectedIdx - 1;
+            worldMapSelectCard(idx);
+        } else if (ev.key === 'ArrowRight') {
+            ev.preventDefault();
+            const idx = worldMapSelectedIdx >= worldMapFiltered.length - 1 ? 0 : worldMapSelectedIdx + 1;
+            worldMapSelectCard(idx);
+        }
+    });
+
+    // Table view button + close
+    document.getElementById('worldmapTableBtn').addEventListener('click', () => {
+        document.getElementById('worldmapTableOverlay').classList.add('open');
+        worldMapRenderTable();
+    });
+    document.getElementById('worldmapTableClose').addEventListener('click', () => {
+        document.getElementById('worldmapTableOverlay').classList.remove('open');
+    });
+
+    // Table toolbar toggles
+    document.getElementById('wmTableClearFilters').addEventListener('click', function() {
+        document.querySelectorAll('.wm-col-filter').forEach(f => {
+            if (f.tagName === 'SELECT') f.value = '';
+            else f.value = '';
+        });
+        const unstocked = document.getElementById('wmTableUnstocked');
+        unstocked.classList.remove('active'); unstocked.textContent = 'Show Unstocked';
+        const exact = document.getElementById('wmTableExact');
+        exact.classList.remove('active'); exact.textContent = 'Filter Exact';
+        worldMapRenderTable();
+    });
+    document.getElementById('wmTableUnstocked').addEventListener('click', function() {
+        this.classList.toggle('active');
+        this.textContent = this.classList.contains('active') ? 'Hide Unstocked' : 'Show Unstocked';
+        worldMapRenderTable();
+    });
+    document.getElementById('wmTableExact').addEventListener('click', function() {
+        this.classList.toggle('active');
+        this.textContent = this.classList.contains('active') ? 'Filter All' : 'Filter Exact';
+        worldMapRenderTable();
+    });
+
+    // Table column sort
+    document.getElementById('worldmapTable').querySelector('thead tr:first-child').addEventListener('click', (ev) => {
+        const th = ev.target.closest('th[data-sort]');
+        if (!th) return;
+        const col = th.dataset.sort;
+        if (worldMapTableSort.col === col) worldMapTableSort.asc = !worldMapTableSort.asc;
+        else worldMapTableSort = { col, asc: true };
+        worldMapRenderTable();
+    });
+
+    // Table column filter inputs
+    document.querySelectorAll('.wm-col-filter').forEach(f => {
+        f.addEventListener('input', worldMapRenderTable);
+        f.addEventListener('change', worldMapRenderTable);
+    });
+
+    // Table body click — copy cells
+    document.getElementById('worldmapTableBody').addEventListener('click', (ev) => {
+        const cell = ev.target.closest('.wm-table-copy');
+        if (cell) {
+            const text = cell.dataset.copy;
+            if (text) {
+                navigator.clipboard.writeText(text).catch(() => {});
+                const orig = cell.textContent;
+                cell.textContent = 'Copied!';
+                setTimeout(() => { cell.textContent = orig; }, 1200);
+            }
+        }
+    });
+
+    // Event delegation for add/delete city buttons (inside Leaflet popups)
+    document.getElementById('worldMapWrap').addEventListener('click', async (e) => {
+        // Add city button
+        if (e.target.id === 'worldmapAddCityBtn') {
+            const nameInput = document.getElementById('worldmapAddCityName');
+            const name = (nameInput?.value || '').trim();
+            if (!name) { nameInput?.focus(); return; }
+            const x = parseInt(e.target.dataset.x);
+            const z = parseInt(e.target.dataset.z);
+            e.target.disabled = true;
+            e.target.textContent = 'Adding...';
+            try {
+                const rows = await supabaseInsert('terminal_cities', {
+                    name, x, z,
+                    added_by: userProfile?.discord_username || 'admin'
+                });
+                if (rows && rows[0]) {
+                    terminalCustomCities.push({ id: rows[0].id, name, x, z, _isCustom: true });
+                    worldMap.closePopup();
+                    worldMapAddCityLabels();
+                }
+            } catch (err) {
+                console.error('Failed to add city:', err);
+                e.target.textContent = 'Error';
+            }
+            return;
+        }
+        // Delete city button
+        if (e.target.classList.contains('worldmap-delete-city-btn')) {
+            const cityId = e.target.dataset.cityId;
+            if (!cityId) return;
+            e.target.disabled = true;
+            e.target.textContent = 'Deleting...';
+            try {
+                await supabaseDelete('terminal_cities', cityId);
+                terminalCustomCities = terminalCustomCities.filter(c => c.id !== cityId);
+                worldMap.closePopup();
+                worldMapAddCityLabels();
+            } catch (err) {
+                console.error('Failed to delete city:', err);
+                e.target.textContent = 'Error';
+            }
+        }
+    });
+}
+
+function worldMapInit() {
+    if (worldMap) { worldMap.remove(); worldMap = null; }
+
+    worldMap = L.map('worldMapContainer', {
+        crs: L.CRS.Simple,
+        minZoom: -5,
+        maxZoom: 3,
+        zoomSnap: 1,
+        attributionControl: false,
+        zoomControl: true,
+        preferCanvas: true,
+        doubleClickZoom: false
+    });
+
+    L.tileLayer('https://civmc-map.duckdns.org/tiles/terrain/z{z}/{x},{y}.png', {
+        minZoom: -5,
+        maxZoom: 3,
+        maxNativeZoom: 0,
+        minNativeZoom: -5,
+        tileSize: 256,
+        noWrap: true,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        keepBuffer: 6
+    }).addTo(worldMap);
+
+    worldMap.setView(worldMapMcToLatLng(0, 0), -3);
+
+    worldMapCityLabels = [];
+    worldMapAddCityLabels();
+
+    // Double-click to add a custom city (admin only)
+    if (userProfile?.is_admin) {
+        worldMap.on('dblclick', (e) => {
+            const mcX = Math.round(e.latlng.lng - 0.5);
+            const mcZ = Math.round(-(e.latlng.lat + 0.5));
+            worldMapShowAddCityPopup(e.latlng, mcX, mcZ);
+        });
+    }
+
+    worldMap.on('mousemove', (e) => {
+        const mcX = Math.round(e.latlng.lng - 0.5);
+        const mcZ = Math.round(-(e.latlng.lat + 0.5));
+        const stats = document.getElementById('worldmapStats');
+        if (stats && stats._baseText) {
+            stats.textContent = stats._baseText + '  |  X: ' + mcX + '  Z: ' + mcZ;
+        }
+    });
+}
+
+function worldMapAddCityLabels() {
+    // Remove existing labels
+    worldMapCityLabels.forEach(l => worldMap.removeLayer(l));
+    worldMapCityLabels = [];
+
+    for (const city of terminalAllCities()) {
+        const isCustom = !!city._isCustom;
+        const label = L.marker(worldMapMcToLatLng(city.x, city.z), {
+            icon: L.divIcon({
+                className: 'worldmap-city-label' + (isCustom ? ' worldmap-city-custom' : ''),
+                html: '<span style="transform:translateX(-50%);display:inline-block;">' + ncEsc(city.name) + '</span>',
+                iconSize: [0, 0],
+                iconAnchor: [0, 12]
+            }),
+            interactive: true
+        }).addTo(worldMap);
+        label._cityName = city.name;
+        label._isCustom = isCustom;
+        label._cityId = city.id || null;
+
+        // Right-click custom city to delete
+        if (isCustom && userProfile?.is_admin) {
+            label.on('contextmenu', (e) => {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                const popup = L.popup({ closeOnClick: true, className: 'worldmap-delete-popup' })
+                    .setLatLng(label.getLatLng())
+                    .setContent('<div style="text-align:center;font-size:0.85rem;"><b>' + ncEsc(city.name) + '</b><br><span style="color:var(--text-muted);font-size:0.7rem;">x: ' + city.x + ', z: ' + city.z + '</span><br><button class="worldmap-delete-city-btn" style="margin-top:8px;padding:4px 16px;font-size:0.8rem;cursor:pointer;background:#aa0000;color:#fff;border:none;border-radius:4px;font-family:Raleway,sans-serif;" data-city-id="' + ncEsc(city.id) + '">Delete City</button></div>')
+                    .openOn(worldMap);
+            });
+        }
+
+        worldMapCityLabels.push(label);
+    }
+}
+
+function worldMapShowAddCityPopup(latlng, mcX, mcZ) {
+    // Remove any existing add-city popup
+    const existing = document.getElementById('worldmapAddCityPopup');
+    if (existing) existing.remove();
+
+    const popup = L.popup({ closeOnClick: true, className: 'worldmap-add-popup', closeButton: true })
+        .setLatLng(latlng)
+        .setContent(
+            '<div style="text-align:center;font-size:0.85rem;">'
+            + '<div style="margin-bottom:6px;font-weight:600;">Add City</div>'
+            + '<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:8px;">x: ' + mcX + ', z: ' + mcZ + '</div>'
+            + '<input type="text" id="worldmapAddCityName" placeholder="City name..." style="width:160px;font-size:0.8rem;padding:4px 8px;font-family:Raleway,sans-serif;background:rgba(255,255,255,0.08);border:1px solid rgba(184,180,204,0.3);border-radius:4px;color:var(--text);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;">'
+            + '<button id="worldmapAddCityBtn" data-x="' + mcX + '" data-z="' + mcZ + '" style="padding:4px 16px;font-size:0.8rem;cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:4px;font-family:Raleway,sans-serif;">Add</button>'
+            + '</div>'
+        )
+        .openOn(worldMap);
+
+    // Focus the input after popup opens
+    setTimeout(() => {
+        const input = document.getElementById('worldmapAddCityName');
+        if (input) {
+            input.focus();
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('worldmapAddCityBtn')?.click();
+            });
+        }
+    }, 50);
+}
+
+async function worldMapFetchData() {
+    try {
+        const data = await tradexFetch({
+            pos: { server: 'play.civmc.net', world: 'overworld', x: 0, y: 64, z: 0 },
+            sortMode: 'closest', limit: 10000, allowUnstocked: true
+        });
+        worldMapExchanges = data.exchanges || [];
+        worldMapDataReady = true;
+    } catch (err) {
+        console.error('World map fetch failed:', err);
+        const stats = document.getElementById('worldmapStats');
+        if (stats) stats.textContent = err.message?.includes('429') ? 'Tradex API is rate-limited. Try again later.' : 'Failed to fetch shop data. Try refreshing.';
+    }
+}
+
+function worldMapGetFiltered() {
+    const outputQ = (document.getElementById('worldmapSearchOutput')?.value || '').toLowerCase().trim();
+    const inputQ = (document.getElementById('worldmapSearchInput')?.value || '').toLowerCase().trim();
+    const showUnstocked = document.getElementById('worldmapUnstocked')?.classList.contains('active');
+    const exactMatch = document.getElementById('worldmapExact')?.classList.contains('active');
+    const freshnessHrs = parseInt(document.getElementById('worldmapFreshness')?.value || '0');
+    const now = Date.now();
+    const mMatch = (val, q) => exactMatch ? val === q : val.includes(q);
+
+    let filtered = worldMapExchanges;
+    if (!showUnstocked) filtered = filtered.filter(e => e.stock > 0);
+    if (freshnessHrs > 0) {
+        const cutoff = now - (freshnessHrs * 3600000);
+        filtered = filtered.filter(e => e.time >= cutoff);
+    }
+    if (outputQ) {
+        filtered = filtered.filter(e => {
+            const outName = (e.output?.material || '').toLowerCase();
+            const outCustom = (e.output?.customName || '').toLowerCase();
+            return mMatch(outName, outputQ) || mMatch(outCustom, outputQ);
+        });
+    }
+    if (inputQ) {
+        filtered = filtered.filter(e => {
+            const inName = (e.input?.material || '').toLowerCase();
+            const inCustom = (e.input?.customName || '').toLowerCase();
+            return mMatch(inName, inputQ) || mMatch(inCustom, inputQ);
+        });
+    }
+    return filtered;
+}
+
+function worldMapRenderMarkers() {
+    if (!worldMap) return;
+
+    worldMapMarkers.forEach(m => worldMap.removeLayer(m));
+    worldMapMarkers = [];
+
+    const now = Date.now();
+    const filtered = worldMapGetFiltered();
+
+    // Group by position
+    const grouped = {};
+    filtered.forEach(e => {
+        const key = e.pos.x + ',' + e.pos.y + ',' + e.pos.z;
+        if (!grouped[key]) grouped[key] = { pos: e.pos, exchanges: [] };
+        grouped[key].exchanges.push(e);
+    });
+
+    const groups = Object.values(grouped);
+    for (const group of groups) {
+        const p = group.pos;
+        const hasStock = group.exchanges.some(e => e.stock > 0);
+        const freshest = Math.max(...group.exchanges.map(e => e.time || 0));
+        const isStale = (now - freshest) > 172800000;
+
+        const marker = L.circleMarker(worldMapMcToLatLng(p.x, p.z), {
+            radius: 5,
+            fillColor: isStale ? '#f5c542' : (hasStock ? '#4caf50' : '#aa0000'),
+            color: 'rgba(255,255,255,0.3)',
+            weight: 0.5,
+            fillOpacity: isStale ? 0.7 : 0.8
+        }).addTo(worldMap);
+
+        const city = terminalClosestCity(p.x, p.z);
+        let popupHtml = '<div style="font-size:0.9rem;max-height:320px;overflow-y:auto;min-width:300px;">';
+        popupHtml += '<div style="font-weight:600;font-size:1rem;margin-bottom:0.4rem;">' + ncEsc(city.name) + ' (' + city.dist + 'm)</div>';
+        popupHtml += '<div style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem;">Coords: ' + p.x + ', ' + p.y + ', ' + p.z + '</div>';
+        for (const ex of group.exchanges.slice(0, 15)) {
+            const inName = ncMatName(ex.input);
+            const outName = ncMatName(ex.output);
+            const freshCls = terminalFreshClass(ex.time);
+            const color = freshCls === 'fresh' ? '#4caf50' : (freshCls === 'aging' ? '#ff9800' : '#888');
+            popupHtml += '<div style="display:flex;justify-content:space-between;gap:0.75rem;padding:0.25rem 0;border-top:1px solid rgba(255,255,255,0.08);font-size:0.85rem;">';
+            popupHtml += '<span>' + ncEsc(inName) + ' x' + (ex.input?.count || 1) + ' &rarr; ' + ncEsc(outName) + ' x' + (ex.output?.count || 1) + '</span>';
+            popupHtml += '<span style="white-space:nowrap;color:' + color + ';">stk ' + (ex.stock || 0) + ' &middot; ' + terminalTimeAgo(ex.time) + '</span>';
+            popupHtml += '</div>';
+        }
+        if (group.exchanges.length > 15) {
+            popupHtml += '<div style="font-size:0.75rem;color:#888;text-align:center;padding-top:0.4rem;">+' + (group.exchanges.length - 15) + ' more trades</div>';
+        }
+        popupHtml += '</div>';
+
+        marker.bindPopup(popupHtml, { maxWidth: 500, minWidth: 320, className: 'nc-leaflet-popup' });
+        marker._wmGroupIdx = worldMapMarkers.length;
+        marker.on('click', () => {
+            worldMapSelectCard(marker._wmGroupIdx);
+        });
+        worldMapMarkers.push(marker);
+    }
+
+    // Store filtered groups for carousel
+    worldMapFiltered = groups;
+    worldMapSelectedIdx = -1;
+    worldMapRenderCarousel();
+
+    const stats = document.getElementById('worldmapStats');
+    if (stats) {
+        const text = 'Showing ' + groups.length + ' locations (' + filtered.length + ' trades) of ' + worldMapExchanges.length + ' total';
+        stats._baseText = text;
+        stats.textContent = text;
+    }
+}
+
+function worldMapRenderCarousel() {
+    const container = document.getElementById('worldmapCarouselList');
+    if (!container) return;
+
+    if (worldMapFiltered.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;padding:0.5rem;">No locations match filters.</div>';
+        return;
+    }
+
+    let html = '';
+    worldMapFiltered.forEach((group, i) => {
+        const p = group.pos;
+        const city = terminalClosestCity(p.x, p.z);
+        const tradeCount = group.exchanges.length;
+        const hasStock = group.exchanges.some(e => e.stock > 0);
+        const freshest = Math.max(...group.exchanges.map(e => e.time || 0));
+        const stockClass = hasStock ? 'in-stock' : 'out-stock';
+        const stockText = hasStock ? 'In Stock' : 'Out of Stock';
+
+        // Show top trade preview
+        const topEx = group.exchanges[0];
+        const inName = ncMatName(topEx.input);
+        const outName = ncMatName(topEx.output);
+        const inCount = topEx.input?.count || 1;
+        const outCount = topEx.output?.count || 1;
+
+        html += `<div class="nc-shop-card" data-wm-idx="${i}">
+            <div class="nc-shop-trade">
+                <span class="nc-shop-item-count">${inCount}x</span>
+                <span class="nc-shop-item-name">${ncEsc(inName)}</span>
+                <span class="arrow">&rarr;</span>
+                <span class="nc-shop-item-count">${outCount}x</span>
+                <span class="nc-shop-item-name">${ncEsc(outName)}</span>
+            </div>
+            <div class="nc-shop-meta">
+                <span class="nc-shop-stock ${stockClass}">${stockText}</span>
+                <span class="nc-shop-fresh">${ncFormatAge(freshest)}</span>
+                <span class="nc-shop-coords">${p.x}, ${p.y}, ${p.z}</span>
+            </div>
+            <div class="nc-shop-near" style="color:#00bcd4;">${ncEsc(city.name)}${tradeCount > 1 ? ' &middot; ' + tradeCount + ' trades' : ''}</div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function worldMapSelectCard(idx) {
+    if (idx < 0 || idx >= worldMapFiltered.length) return;
+    worldMapSelectedIdx = idx;
+
+    // Highlight card
+    const container = document.getElementById('worldmapCarouselList');
+    if (container) {
+        container.querySelectorAll('.nc-shop-card').forEach((c, i) => {
+            c.classList.toggle('active', i === idx);
+        });
+        const activeCard = container.querySelector(`.nc-shop-card[data-wm-idx="${idx}"]`);
+        if (activeCard) activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+
+    // Open popup and pan map
+    const marker = worldMapMarkers[idx];
+    if (marker && worldMap) {
+        marker.openPopup();
+        worldMap.panTo(marker.getLatLng(), { animate: true });
+    }
+}
+
+// ============================================
+// World Map Table View
+// ============================================
+
+function wmColFilter(col) {
+    const input = document.querySelector(`.wm-col-filter[data-col="${col}"]`);
+    return input ? input.value.toLowerCase().trim() : '';
+}
+
+function worldMapRenderTable() {
+    const tbody = document.getElementById('worldmapTableBody');
+    if (!tbody) return;
+    const showUnstocked = document.getElementById('wmTableUnstocked').classList.contains('active');
+    const exactMatch = document.getElementById('wmTableExact').classList.contains('active');
+    const match = (val, filter) => exactMatch ? val.toLowerCase() === filter : val.toLowerCase().includes(filter);
+
+    const fCity = wmColFilter('city');
+    const fCoords = wmColFilter('coords');
+    const fSelling = wmColFilter('selling');
+    const fBuyItem = wmColFilter('buyItem');
+    const fSellQty = wmColFilter('sellQty');
+    const fBuyQty = wmColFilter('buyQty');
+    const fStock = wmColFilter('stock');
+
+    let rows = worldMapExchanges
+        .filter(e => {
+            if (!fCoords && !showUnstocked && e.stock <= 0) return false;
+            return true;
+        })
+        .map(e => {
+            const outName = ncMatName(e.output);
+            const inName = ncMatName(e.input);
+            const outCount = e.output?.count || 1;
+            const inCount = e.input?.count || 1;
+            const city = terminalClosestCity(e.pos.x, e.pos.z);
+            return { e, outName, outCount, inName, inCount, cityName: city.name, cityDist: city.dist };
+        });
+
+    if (fCity) rows = rows.filter(r => match(r.cityName, fCity));
+    if (fCoords) rows = rows.filter(r => `${r.e.pos.x}, ${r.e.pos.y}, ${r.e.pos.z}`.includes(fCoords));
+    if (fSelling) rows = rows.filter(r => match(r.outName, fSelling));
+    if (fBuyItem) rows = rows.filter(r => match(r.inName, fBuyItem));
+    if (fSellQty) rows = rows.filter(r => String(r.outCount).includes(fSellQty));
+    if (fBuyQty) rows = rows.filter(r => String(r.inCount).includes(fBuyQty));
+    if (fStock) rows = rows.filter(r => String(r.e.stock != null ? r.e.stock : '').includes(fStock));
+    const fDate = document.getElementById('wmDateFilter').value;
+    if (fDate) {
+        const now = Date.now();
+        const ms = fDate.endsWith('h') ? parseInt(fDate) * 3600000 : parseInt(fDate) * 86400000;
+        rows = rows.filter(r => r.e.time >= now - ms);
+    }
+
+    const dir = worldMapTableSort.asc ? 1 : -1;
+    rows.sort((a, b) => {
+        switch (worldMapTableSort.col) {
+            case 'city': return dir * a.cityName.localeCompare(b.cityName);
+            case 'coords': return dir * (a.e.pos.x - b.e.pos.x || a.e.pos.z - b.e.pos.z);
+            case 'sellQty': return dir * (a.outCount - b.outCount);
+            case 'selling': return dir * a.outName.localeCompare(b.outName);
+            case 'buyQty': return dir * (a.inCount - b.inCount);
+            case 'buyItem': return dir * a.inName.localeCompare(b.inName);
+            case 'stock': return dir * ((a.e.stock || 0) - (b.e.stock || 0));
+            case 'age': return dir * ((a.e.time || 0) - (b.e.time || 0));
+            default: return 0;
+        }
+    });
+
+    // Update sort indicators
+    document.querySelectorAll('#worldmapTable thead tr:first-child th[data-sort]').forEach(th => {
+        th.style.cursor = 'pointer';
+        const col = th.dataset.sort;
+        const label = worldMapColLabels[col] || col;
+        const arrow = worldMapTableSort.col === col ? (worldMapTableSort.asc ? ' \u25B2' : ' \u25BC') : '';
+        th.textContent = label + arrow;
+    });
+
+    let html = '';
+    rows.forEach(r => {
+        const e = r.e;
+        const coordStr = `${e.pos.x}, ${e.pos.y}, ${e.pos.z}`;
+        const isUnstocked = e.stock <= 0;
+        const rowClass = isUnstocked ? ' class="wm-row-unstocked"' : '';
+        html += `<tr${rowClass}>`;
+        html += `<td style="white-space:nowrap;">${ncEsc(r.cityName)}</td>`;
+        html += `<td class="wm-table-copy" style="cursor:pointer;white-space:nowrap;" title="Click to copy" data-copy="${coordStr}">${coordStr}</td>`;
+        html += `<td style="font-weight:600;white-space:nowrap;">${r.outCount}</td>`;
+        html += `<td class="wm-table-copy" style="cursor:pointer;white-space:nowrap;" title="Click to copy" data-copy="${ncEsc(r.outName)}">${ncEsc(r.outName)}</td>`;
+        html += `<td style="font-weight:600;white-space:nowrap;">${r.inCount}</td>`;
+        html += `<td class="wm-table-copy" style="cursor:pointer;white-space:nowrap;" title="Click to copy" data-copy="${ncEsc(r.inName)}">${ncEsc(r.inName)}</td>`;
+        html += `<td style="white-space:nowrap;">${e.stock != null ? e.stock : '\u2014'}</td>`;
+        html += `<td style="white-space:nowrap;">${ncFormatAge(e.time)}</td>`;
+        html += `</tr>`;
+    });
+
+    tbody.innerHTML = html || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">No trades found.</td></tr>';
+}
+
 // Terminal Admin — Management Dashboard
 // ============================================
 let termAdminTab = 'flags';
