@@ -652,8 +652,8 @@ function buildPopupHTML(prop, canEdit, pi) {
             const stateClass = isConfirmed ? 'confirmed' : isDismissed ? 'dismissed' : 'suggested';
             // Build compact trade summary (input → output for each exchange)
             const tradeSummary = shop.exchanges.map(ex => {
-                const inName = (ex.input?.customName || ex.input?.material || '?').replace(/_/g, ' ');
-                const outName = (ex.output?.customName || ex.output?.material || '?').replace(/_/g, ' ');
+                const inName = (typeof ncMatName === 'function' ? ncMatName(ex.input) : (ex.input?.customName || ex.input?.material || '?')).replace(/_/g, ' ');
+                const outName = (typeof ncMatName === 'function' ? ncMatName(ex.output) : (ex.output?.customName || ex.output?.material || '?')).replace(/_/g, ' ');
                 return `<span class="nc-shop-link-trade-detail">${ncEsc(inName)} &rarr; ${ncEsc(outName)}</span>`;
             }).join('');
             h += `<div class="nc-shop-link-row ${stateClass}" data-shop-key="${key}" data-pi="${pi}" data-shop-x="${shop.pos.x}" data-shop-y="${shop.pos.y}" data-shop-z="${shop.pos.z}">`;
@@ -681,9 +681,11 @@ function buildPopupHTML(prop, canEdit, pi) {
     // Actions
     h += `<div class="nc-popup-actions">`;
     h += `<button class="nc-popup-edit-btn" onclick="ncEditPropertyInTable(${pi})">Edit in Table</button>`;
-    h += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
-    h += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
-    h += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
+    if (ncCanEdit()) {
+        h += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
+        h += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
+        h += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
+    }
     h += `</div></div></div>`;
     return h;
 }

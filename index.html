@@ -4026,10 +4026,63 @@
         .anlys-table tr:hover td { background: rgba(255,255,255,0.04); }
         .anlys-table .price-buy { color: #6c6; }
         .anlys-table .price-sell { color: #c66; }
-        .anlys-table .price-barter { color: #cc6; }
+
+        .anlys-ticker-wrap {
+            overflow: hidden;
+            background: rgba(0,0,0,0.15);
+            border: 1px solid rgba(212, 200, 160, 0.15);
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0;
+        }
+        .anlys-ticker {
+            display: inline-flex;
+            white-space: nowrap;
+            animation: tickerScroll 120s linear infinite;
+        }
+        .anlys-ticker:hover { animation-play-state: paused; }
+        .anlys-ticker-set { display: inline-flex; gap: 3rem; padding-right: 3rem; }
+        .anlys-ticker-item { font-size: 0.8rem; color: var(--text-muted); }
+        .anlys-ticker-item .ticker-name { color: var(--text); margin-right: 0.4rem; font-weight: 500; }
+        .anlys-ticker-item .ticker-price { color: #d4c8a0; }
+        .anlys-ticker-item .ticker-buy { color: #6c6; }
+        .anlys-ticker-item .ticker-sell { color: #c66; }
+        .anlys-ticker-item .ticker-nodata { color: rgba(184,180,204,0.4); font-style: italic; }
+        .anlys-ticker-item .ticker-spread { font-size: 0.75rem; color: var(--text-muted); }
+        @keyframes tickerScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .anlys-ci-tag { font-size: 0.65rem; color: #a8d8ea; background: rgba(168,216,234,0.15); padding: 0.1rem 0.35rem; border-radius: 3px; margin-left: 0.3rem; vertical-align: middle; }
+
+        /* Category & farmable tags */
+        .anlys-cat-tag { font-size: 0.6rem; font-weight: 600; padding: 0.1rem 0.35rem; border-radius: 3px; letter-spacing: 0.05em; display: inline-block; min-width: 2rem; text-align: center; }
+        .anlys-cat-none { color: #666; border: 1px dashed #444 !important; background: transparent !important; }
+        .anlys-farm-tag { font-size: 0.55rem; color: #6b6; background: rgba(102,187,102,0.15); padding: 0.05rem 0.25rem; border-radius: 2px; margin-left: 0.25rem; }
+        .anlys-nonfarm-tag { font-size: 0.55rem; color: #b86; background: rgba(187,136,102,0.15); padding: 0.05rem 0.25rem; border-radius: 2px; margin-left: 0.25rem; }
+
+        /* Category/farmable dropdowns */
+        .anlys-cat-select, .anlys-farm-select {
+            font-size: 0.6rem; padding: 0.1rem 0.2rem; border-radius: 3px;
+            background: rgba(255,255,255,0.06); color: var(--text); border: 1px dashed #555;
+            cursor: pointer; outline: none;
+        }
+        .anlys-cat-select { min-width: 3.2rem; }
+        .anlys-farm-select { min-width: 2rem; margin-left: 0.2rem; }
+        .anlys-cat-select:focus, .anlys-farm-select:focus { border-color: var(--accent); }
+        .anlys-cat-select option, .anlys-farm-select option { background: #2a2a3a; color: var(--text); }
+
+        /* Category filter buttons */
+        .anlys-cat-btn { border-width: 1px; border-style: solid; opacity: 0.6; transition: opacity 0.15s; }
+        .anlys-cat-btn.active { opacity: 1; background: rgba(255,255,255,0.08); }
+        .anlys-cat-btn:hover { opacity: 0.9; }
+        .anlys-farm-btn { border: 1px solid #777; opacity: 0.6; transition: opacity 0.15s; }
+        .anlys-farm-btn.active { opacity: 1; background: rgba(255,255,255,0.08); }
+        .anlys-farm-btn:hover { opacity: 0.9; }
 
         .anlys-search { width: 100%; max-width: 400px; margin-bottom: 0.75rem; }
-        .anlys-filters { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+        .anlys-filters { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center; }
 
         .anlys-chart-wrap { position: relative; width: 100%; height: 300px; margin: 1rem 0; }
         .anlys-chart-wrap canvas { width: 100%; height: 100%; }
@@ -4582,11 +4635,12 @@
     </div>
 
     <script src="app.js?v=164"></script>
-    <script src="nc-map.js?v=164"></script>
+    <script src="nc-map.js?v=165"></script>
     <script src="nc-table.js?v=159"></script>
     <script src="nc-modals.js?v=159"></script>
     <script src="nc-shops.js?v=183"></script>
-    <script src="analysis.js?v=3"></script>
+    <script src="analysis-categories.js?v=1"></script>
+    <script src="analysis.js?v=12"></script>
     <script src="nc-init.js?v=159"></script>
 </body>
 </html>
