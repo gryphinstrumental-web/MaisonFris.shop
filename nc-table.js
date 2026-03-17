@@ -103,9 +103,11 @@ function renderNCTable(properties, filter = '') {
         });
         // Image + txn + log + fine + compliance columns
         const imgTh = document.createElement('th'); imgTh.textContent = ''; thead.appendChild(imgTh);
-        const txnTh = document.createElement('th'); txnTh.textContent = 'Txn'; thead.appendChild(txnTh);
-        const logTh = document.createElement('th'); logTh.textContent = 'Log'; thead.appendChild(logTh);
-        const fineTh = document.createElement('th'); fineTh.textContent = 'Fine'; thead.appendChild(fineTh);
+        if (ncCanEdit()) {
+            const txnTh = document.createElement('th'); txnTh.textContent = 'Txn'; thead.appendChild(txnTh);
+            const logTh = document.createElement('th'); logTh.textContent = 'Log'; thead.appendChild(logTh);
+            const fineTh = document.createElement('th'); fineTh.textContent = 'Fine'; thead.appendChild(fineTh);
+        }
         const compTh = document.createElement('th'); compTh.textContent = 'Comp'; compTh.title = 'Compliance'; thead.appendChild(compTh);
     }
 
@@ -138,9 +140,9 @@ function renderNCTable(properties, filter = '') {
             <td data-field="x"${vis('x')}>${prop.x}</td>
             <td data-field="z"${vis('z')}>${prop.z}</td>
             <td class="nc-img-cell">${prop.image_url ? '<span class="nc-has-img" title="Has image">&#x1f5bc;</span>' : '<span class="nc-no-img">—</span>'}</td>
-            <td><button class="nc-table-log nc-table-txn" data-prop-idx="${i}" title="Transaction Log">Txn</button></td>
+            ${ncCanEdit() ? `<td><button class="nc-table-log nc-table-txn" data-prop-idx="${i}" title="Transaction Log">Txn</button></td>
             <td><button class="nc-table-log" data-prop-idx="${i}" title="Surveyor's Log">Log</button></td>
-            <td><button class="nc-table-log nc-table-fine" data-prop-idx="${i}" title="Fine Log">Fine</button></td>
+            <td><button class="nc-table-log nc-table-fine" data-prop-idx="${i}" title="Fine Log">Fine</button></td>` : ''}
             <td>${(() => { const c = ncGetCompliance(prop); return c ? (c.compliant ? '<span title="Compliant" style="color:#4caf50;">\u2705</span>' : '<span title="Non-Compliant (' + c.passed + '/' + c.total + ')" style="color:#e04040;">\u274C</span>') : '<span style="color:var(--text-muted);">—</span>'; })()}</td>
         `;
 
@@ -152,23 +154,25 @@ function renderNCTable(properties, filter = '') {
             if (card) highlightNCProperty(i, card);
         });
 
-        // Transaction Log button
-        tr.querySelector('.nc-table-txn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            ncShowTransactionLog(prop);
-        });
+        if (ncCanEdit()) {
+            // Transaction Log button
+            tr.querySelector('.nc-table-txn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                ncShowTransactionLog(prop);
+            });
 
-        // Surveyor's Log button
-        tr.querySelector('.nc-table-log:not(.nc-table-txn):not(.nc-table-fine)').addEventListener('click', (e) => {
-            e.stopPropagation();
-            ncShowSurveyorLog(prop);
-        });
+            // Surveyor's Log button
+            tr.querySelector('.nc-table-log:not(.nc-table-txn):not(.nc-table-fine)').addEventListener('click', (e) => {
+                e.stopPropagation();
+                ncShowSurveyorLog(prop);
+            });
 
-        // Fine Log button
-        tr.querySelector('.nc-table-fine').addEventListener('click', (e) => {
-            e.stopPropagation();
-            ncShowFineLog(prop);
-        });
+            // Fine Log button
+            tr.querySelector('.nc-table-fine').addEventListener('click', (e) => {
+                e.stopPropagation();
+                ncShowFineLog(prop);
+            });
+        }
 
         // Click-to-expand for truncated text cells (owner, name, address)
         ['owner', 'name', 'address', 'tenant', 'discord_contact'].forEach(field => {
