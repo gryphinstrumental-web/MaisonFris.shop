@@ -11,6 +11,7 @@ let anlysCurrentTab = 'snapshots';
 let anlysAutoTimerId = null;
 let anlysSnapshots = [];        // metadata from Supabase
 let anlysCommodityData = [];    // latest snapshot's trade prices
+let anlysRawListings = {};      // { "commodity|enchants": [{price, x, y, z, city, stock, time, side}] }
 let anlysSortCol = 'commodity';
 let anlysSortAsc = true;
 
@@ -144,8 +145,7 @@ function anlysIsDiamond(mat) {
 
 function anlysCommodityKey(item) {
     if (!item) return '?';
-    let name = item.material || '?';
-    // Don't include compacted/block in the name since we normalize quantities
+    let name = item.customName || item.material || '?';
     const ench = ncEnchantStr(item);
     if (ench) name += ' [' + ench + ']';
     return name;
@@ -275,6 +275,81 @@ function anlysAggregateExchanges(exchanges) {
     }
 
     return { results, stocked, uniquePairs: results.length };
+}
+
+// Build per-listing data from raw exchanges (with city/location info)
+function anlysBuildRawListings(exchanges) {
+    const listings = {};
+    const directPrices = {};
+
+    // Pass 1: direct diamond trades
+    for (const e of exchanges) {
+        if (!e.input?.material || !e.output?.material) continue;
+        const inD = anlysDiamondCount(e.input);
+        const outD = anlysDiamondCount(e.output);
+        const city = (typeof terminalClosestCity === 'function') ? terminalClosestCity(e.pos.x, e.pos.z).name : 'Unknown';
+        const time = e.time || 0;
+
+        if (inD != null && !anlysIsDiamond(e.output.material)) {
+            const commodity = anlysCommodityKey(e.output);
+            const enchants = ncEnchantStr(e.output);
+            const effectiveOut = anlysEffectiveCount(e.output);
+            const priceD = inD / effectiveOut;
+            const key = `${commodity}|${enchants}`;
+            if (!listings[key]) listings[key] = [];
+            listings[key].push({ price: priceD, x: e.pos.x, y: e.pos.y, z: e.pos.z, city, stock: e.stock || 0, time, side: 'buy' });
+            if (!directPrices[commodity]) directPrices[commodity] = [];
+            directPrices[commodity].push(priceD);
+        } else if (outD != null && !anlysIsDiamond(e.input.material)) {
+            const commodity = anlysCommodityKey(e.input);
+            const enchants = ncEnchantStr(e.input);
+            const effectiveIn = anlysEffectiveCount(e.input);
+            const priceD = outD / effectiveIn;
+            const key = `${commodity}|${enchants}`;
+            if (!listings[key]) listings[key] = [];
+            listings[key].push({ price: priceD, x: e.pos.x, y: e.pos.y, z: e.pos.z, city, stock: e.stock || 0, time, side: 'sell' });
+            if (!directPrices[commodity]) directPrices[commodity] = [];
+            directPrices[commodity].push(priceD);
+        }
+    }
+
+    // Pass 2: non-diamond trades (derive via lookup)
+    const avgLookup = {};
+    for (const [c, p] of Object.entries(directPrices)) {
+        const sorted = p.slice().sort((a, b) => a - b);
+        avgLookup[c] = anlysMedian(sorted);
+    }
+    for (const e of exchanges) {
+        if (!e.input?.material || !e.output?.material) continue;
+        if (anlysIsDiamond(e.input.material) || anlysIsDiamond(e.output.material)) continue;
+        const inC = anlysCommodityKey(e.input);
+        const outC = anlysCommodityKey(e.output);
+        const inP = avgLookup[inC];
+        const outP = avgLookup[outC];
+        const city = (typeof terminalClosestCity === 'function') ? terminalClosestCity(e.pos.x, e.pos.z).name : 'Unknown';
+        const time = e.time || 0;
+
+        if (inP != null) {
+            const commodity = outC;
+            const enchants = ncEnchantStr(e.output);
+            const effectiveOut = anlysEffectiveCount(e.output);
+            const effectiveIn = anlysEffectiveCount(e.input);
+            const priceD = (effectiveIn * inP) / effectiveOut;
+            const key = `${commodity}|${enchants}`;
+            if (!listings[key]) listings[key] = [];
+            listings[key].push({ price: priceD, x: e.pos.x, y: e.pos.y, z: e.pos.z, city, stock: e.stock || 0, time, side: 'buy' });
+        } else if (outP != null) {
+            const commodity = inC;
+            const enchants = ncEnchantStr(e.input);
+            const effectiveOut = anlysEffectiveCount(e.output);
+            const effectiveIn = anlysEffectiveCount(e.input);
+            const priceD = (effectiveOut * outP) / effectiveIn;
+            const key = `${commodity}|${enchants}`;
+            if (!listings[key]) listings[key] = [];
+            listings[key].push({ price: priceD, x: e.pos.x, y: e.pos.y, z: e.pos.z, city, stock: e.stock || 0, time, side: 'sell' });
+        }
+    }
+    return listings;
 }
 
 // ============================================
@@ -511,14 +586,19 @@ async function anlysRenderCommodities() {
     content.innerHTML = '<div class="anlys-loading">Loading commodity data...</div>';
 
     try {
-        // Get latest snapshot ID
-        const snaps = await supabaseRest('tradex_snapshots', 'select=id&order=taken_at.desc&limit=1');
-        if (!snaps.length) {
-            content.innerHTML = '<div class="anlys-loading">No snapshots yet. Take a snapshot first.</div>';
+        // Load from live Tradex cache (shared with shop explorer)
+        content.innerHTML = '<div class="anlys-loading">Fetching Tradex data...</div>';
+        await tradexEnsureCache();
+        const exchanges = tradexGetCached();
+        if (!exchanges || !exchanges.length) {
+            content.innerHTML = '<div class="anlys-loading">No exchange data available. Try refreshing.</div>';
             return;
         }
-        const latestId = snaps[0].id;
-        anlysCommodityData = await supabaseRest('tradex_trade_prices', `select=*&snapshot_id=eq.${latestId}&side=neq.barter&order=commodity`);
+
+        // Build raw listings (per-listing with city info) and aggregated data
+        anlysRawListings = anlysBuildRawListings(exchanges);
+        const { results } = anlysAggregateExchanges(exchanges);
+        anlysCommodityData = results;
 
         // Merge buy/sell into single rows per commodity
         anlysMergedData = anlysMergeForDisplay(anlysCommodityData);
@@ -541,11 +621,18 @@ async function anlysRenderCommodities() {
                 <button class="anlys-btn anlys-cat-btn" data-cat="building" style="border-color:${ANLYS_CAT_COLORS.building}">Building</button>
                 <button class="anlys-btn anlys-cat-btn" data-cat="tools" style="border-color:${ANLYS_CAT_COLORS.tools}">Tools/Armor</button>
                 <button class="anlys-btn anlys-cat-btn" data-cat="currency" style="border-color:${ANLYS_CAT_COLORS.currency}">Currency</button>
+                <button class="anlys-btn anlys-cat-btn" data-cat="ore" style="border-color:${ANLYS_CAT_COLORS.ore}">Ore</button>
+                <button class="anlys-btn anlys-cat-btn" data-cat="food" style="border-color:${ANLYS_CAT_COLORS.food}">Food</button>
+                <button class="anlys-btn anlys-cat-btn" data-cat="raw" style="border-color:${ANLYS_CAT_COLORS.raw}">Raw Materials</button>
+                <button class="anlys-btn anlys-cat-btn" data-cat="aesthetics" style="border-color:${ANLYS_CAT_COLORS.aesthetics}">Aesthetics</button>
                 <button class="anlys-btn anlys-cat-btn" data-cat="lore" style="border-color:${ANLYS_CAT_COLORS.lore}">Lore</button>
                 <button class="anlys-btn anlys-cat-btn" data-cat="none">Uncat${uncatNote}</button>
                 <span style="border-left:1px solid var(--border);margin:0 0.3rem"></span>
                 <button class="anlys-btn anlys-farm-btn" data-farm="farmable">Farmable</button>
                 <button class="anlys-btn anlys-farm-btn" data-farm="nonfarmable">Non-farm</button>
+                <span style="border-left:1px solid var(--border);margin:0 0.3rem"></span>
+                <button class="anlys-btn anlys-city-btn" data-city="Pavia">Pavia</button>
+                <button class="anlys-btn anlys-city-btn" data-city="New Callisto">New Callisto</button>
             </div>
             <div id="anlysCommodityTable"></div>
         `;
@@ -589,12 +676,22 @@ async function anlysRenderCommodities() {
                 anlysFilterCommodities();
             });
         });
+
+        // City filter buttons (toggle, single-select)
+        content.querySelectorAll('.anlys-city-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.classList.toggle('active');
+                content.querySelectorAll('.anlys-city-btn').forEach(b => { if (b !== btn) b.classList.remove('active'); });
+                anlysFilterCommodities();
+            });
+        });
     } catch (err) {
         content.innerHTML = `<div class="anlys-loading">Error: ${err.message}</div>`;
     }
 }
 
 // Merge buy/sell rows into one row per commodity for display
+// Uses anlysRawListings for city-specific prices (stocked only)
 let anlysMergedData = [];
 function anlysMergeForDisplay(data) {
     const merged = {};
@@ -606,35 +703,41 @@ function anlysMergeForDisplay(data) {
                 enchants: r.enchants || '',
                 is_compacted: r.is_compacted || false,
                 weightedPrice: 0, totalListings: 0,
-                minPrice: Infinity, maxPrice: -Infinity,
                 totalStock: 0, primarySide: r.side
             };
         }
         const m = merged[key];
         m.weightedPrice += (r.avg_price || 0) * (r.num_listings || 1);
         m.totalListings += r.num_listings || 1;
-        m.minPrice = Math.min(m.minPrice, r.min_price || 0);
-        m.maxPrice = Math.max(m.maxPrice, r.max_price || 0);
         m.totalStock += r.total_stock || 0;
-        // Prefer "buy" side for chart links (more common)
         if (r.side === 'buy' && (r.num_listings || 0) > 0) m.primarySide = 'buy';
     }
     return Object.values(merged).map(m => {
         const price = m.totalListings > 0 ? m.weightedPrice / m.totalListings : 0;
         const isSub1d = price > 0 && price < 1;
+        const key = `${m.commodity}|${m.enchants}`;
+        // Get stocked listings for city-specific prices
+        const raw = (anlysRawListings[key] || []).filter(l => l.stock > 0);
+        const buyListings = raw.filter(l => l.side === 'buy');
+        // Best = cheapest stocked buy listing anywhere
+        const cheapest = buyListings.length ? Math.min(...buyListings.map(l => l.price)) : null;
+        // Pavia price = cheapest stocked buy in Pavia
+        const paviaListings = buyListings.filter(l => l.city === 'Pavia');
+        const paviaPrice = paviaListings.length ? Math.min(...paviaListings.map(l => l.price)) : null;
+        // NC price = cheapest stocked buy in New Callisto
+        const ncListings = buyListings.filter(l => l.city === 'New Callisto');
+        const ncPrice = ncListings.length ? Math.min(...ncListings.map(l => l.price)) : null;
+
         return {
             commodity: m.commodity,
             enchants: m.enchants,
             is_compacted: m.is_compacted,
             raw_price: price,
-            // Sub-1d items: show "items per 1 diamond" (inverted price)
             per_diamond: isSub1d ? 1 / price : 0,
-            per_diamond_min: isSub1d && m.maxPrice > 0 ? 1 / m.maxPrice : 0, // worst deal (highest price = fewest per d)
-            per_diamond_max: isSub1d && m.minPrice > 0 ? 1 / m.minPrice : 0, // best deal (lowest price = most per d)
-            display_price: isSub1d ? price : price,
-            min_price: m.minPrice === Infinity ? 0 : m.minPrice,
-            max_price: m.maxPrice === -Infinity ? 0 : m.maxPrice,
             is_sub1d: isSub1d,
+            cheapest_price: cheapest,
+            pavia_price: paviaPrice,
+            nc_price: ncPrice,
             category: anlysGetCategory(m.commodity),
             farmable: anlysIsFarmable(m.commodity),
             num_listings: m.totalListings,
@@ -683,6 +786,10 @@ function anlysFilterCommodities() {
     const farmBtn = document.querySelector('.anlys-farm-btn.active');
     const farmFilter = farmBtn ? farmBtn.dataset.farm : null;
 
+    // City filter
+    const cityBtn = document.querySelector('.anlys-city-btn.active');
+    const cityFilter = cityBtn ? cityBtn.dataset.city : null;
+
     let rows = anlysMergedData.filter(r => {
         if (query && !r.commodity.toLowerCase().includes(query)) return false;
         if (stockedOnly && r.total_stock <= 0) return false;
@@ -697,15 +804,24 @@ function anlysFilterCommodities() {
         // Farmable filter
         if (farmFilter === 'farmable' && r.farmable !== true) return false;
         if (farmFilter === 'nonfarmable' && r.farmable !== false) return false;
+        // City filter — only show items that have stocked listings in the selected city
+        if (cityFilter) {
+            const key = `${r.commodity}|${r.enchants || ''}`;
+            const cityListings = (anlysRawListings[key] || []).filter(l => l.stock > 0 && l.city === cityFilter);
+            if (!cityListings.length) return false;
+        }
         return true;
     });
 
-    // Sort — always use raw_price for price columns so sub-1d and normal items sort correctly
-    const sortKey = ['display_price', 'min_price', 'max_price'].includes(anlysSortCol)
-        ? (anlysSortCol === 'display_price' ? 'raw_price' : anlysSortCol)
-        : anlysSortCol;
+    // Sort — use raw_price for price columns
+    const sortKeyMap = { cheapest_price: 'cheapest_price', pavia_price: 'pavia_price', nc_price: 'nc_price' };
+    const sortKey = sortKeyMap[anlysSortCol] || anlysSortCol;
     rows.sort((a, b) => {
         let va = a[sortKey], vb = b[sortKey];
+        // nulls sort last
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
         if (typeof va === 'string') va = va.toLowerCase();
         if (typeof vb === 'string') vb = vb.toLowerCase();
         if (va < vb) return anlysSortAsc ? -1 : 1;
@@ -716,9 +832,9 @@ function anlysFilterCommodities() {
     const cols = [
         { key: 'category', label: 'Cat' },
         { key: 'commodity', label: 'Commodity' },
-        { key: 'display_price', label: 'Price' },
-        { key: 'min_price', label: 'Min' },
-        { key: 'max_price', label: 'Max' },
+        { key: 'cheapest_price', label: 'Cheapest' },
+        { key: 'pavia_price', label: 'Pavia' },
+        { key: 'nc_price', label: 'New Callisto' },
         { key: 'num_listings', label: 'Listings' },
         { key: 'total_stock', label: 'Stock' }
     ];
@@ -731,16 +847,14 @@ function anlysFilterCommodities() {
     html += '<th></th></tr></thead><tbody>';
 
     for (const r of rows) {
-        let priceCell, minCell, maxCell;
-        if (r.is_sub1d) {
-            priceCell = `${Math.round(r.per_diamond)}:1d`;
-            minCell = `${Math.round(r.per_diamond_min)}:1d`;
-            maxCell = `${Math.round(r.per_diamond_max)}:1d`;
-        } else {
-            priceCell = anlysFormatPrice(r.raw_price) + 'd';
-            minCell = anlysFormatPrice(r.min_price) + 'd';
-            maxCell = anlysFormatPrice(r.max_price) + 'd';
-        }
+        const fmtP = (p) => {
+            if (p == null) return '<span style="color:var(--text-muted)">—</span>';
+            if (r.is_sub1d) return `${Math.round(1 / p)}:1d`;
+            return anlysFormatPrice(p) + 'd';
+        };
+        const cheapCell = fmtP(r.cheapest_price);
+        const paviaCell = fmtP(r.pavia_price);
+        const ncCell = fmtP(r.nc_price);
         // Category: always show dropdown
         const comEsc = anlysEscape(r.commodity);
         const sel = r.category || '';
@@ -750,6 +864,10 @@ function anlysFilterCommodities() {
             <option value="building"${sel === 'building' ? ' selected' : ''}>BLD</option>
             <option value="tools"${sel === 'tools' ? ' selected' : ''}>T&A</option>
             <option value="currency"${sel === 'currency' ? ' selected' : ''}>CUR</option>
+            <option value="ore"${sel === 'ore' ? ' selected' : ''}>ORE</option>
+            <option value="food"${sel === 'food' ? ' selected' : ''}>FOOD</option>
+            <option value="raw"${sel === 'raw' ? ' selected' : ''}>RAW</option>
+            <option value="aesthetics"${sel === 'aesthetics' ? ' selected' : ''}>AES</option>
             <option value="lore"${sel === 'lore' ? ' selected' : ''}>LORE</option>
         </select>`;
         // Farmable: always show dropdown
@@ -763,10 +881,10 @@ function anlysFilterCommodities() {
         html += `<tr>
             <td>${catCell}${farmCell}</td>
             <td>${anlysEscape(r.commodity)}${r.enchants ? ' <small>' + anlysEscape(r.enchants) + '</small>' : ''}</td>
-            <td>${priceCell}</td>
-            <td>${minCell}</td>
-            <td>${maxCell}</td>
-            <td>${r.num_listings}</td>
+            <td>${cheapCell}</td>
+            <td>${paviaCell}</td>
+            <td>${ncCell}</td>
+            <td><span class="anlys-listings-link" data-commodity="${comEsc}" data-enchants="${anlysEscape(r.enchants || '')}" style="color:var(--accent);cursor:pointer;text-decoration:underline;">${r.num_listings}</span></td>
             <td>${r.total_stock}</td>
             <td><span class="snap-del" data-commodity="${anlysEscape(r.commodity)}" data-side="${r.side}" data-enchants="${anlysEscape(r.enchants || '')}" style="color:var(--accent);cursor:pointer;">chart</span></td>
         </tr>`;
@@ -785,8 +903,15 @@ function anlysFilterCommodities() {
         });
     });
 
+    // Listings popup handlers
+    container.querySelectorAll('.anlys-listings-link').forEach(el => {
+        el.addEventListener('click', () => {
+            anlysShowListingsPopup(el.dataset.commodity, el.dataset.enchants);
+        });
+    });
+
     // Chart link handlers
-    container.querySelectorAll('span[data-commodity]').forEach(el => {
+    container.querySelectorAll('.snap-del[data-commodity]').forEach(el => {
         el.addEventListener('click', () => {
             anlysCurrentTab = 'history';
             document.querySelectorAll('.anlys-tab').forEach(t => t.classList.remove('active'));
@@ -845,6 +970,71 @@ function anlysEscape(s) {
     const el = document.createElement('span');
     el.textContent = s;
     return el.innerHTML;
+}
+
+// ============================================
+// Listings Detail Popup
+// ============================================
+function anlysShowListingsPopup(commodity, enchants) {
+    const key = `${commodity}|${enchants || ''}`;
+    const raw = anlysRawListings[key] || [];
+    // Sort by price ascending (cheapest first)
+    const sorted = raw.slice().sort((a, b) => a.price - b.price);
+
+    // Remove existing popup
+    document.querySelector('.anlys-listings-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'anlys-listings-overlay';
+    const isSub1d = sorted.length > 0 && sorted[0].price < 1;
+
+    let html = `<div class="anlys-listings-popup">
+        <div class="anlys-listings-header">
+            <h3>${anlysEscape(commodity)}${enchants ? ' <small>' + anlysEscape(enchants) + '</small>' : ''}</h3>
+            <span class="anlys-listings-close" style="cursor:pointer;font-size:1.2rem;">&times;</span>
+        </div>
+        <div class="anlys-listings-scroll">
+        <table class="anlys-table" style="margin:0;">
+            <thead><tr><th>Price</th><th>City</th><th>Coords</th><th>Stock</th><th>Side</th><th>Last Updated</th></tr></thead>
+            <tbody>`;
+
+    for (const l of sorted) {
+        const priceStr = isSub1d ? `${Math.round(1 / l.price)}:1d` : anlysFormatPrice(l.price) + 'd';
+        const stocked = l.stock > 0 ? l.stock : '<span style="color:var(--text-muted)">0</span>';
+        const coords = `${l.x}, ${l.y}, ${l.z}`;
+        const ago = l.time ? anlysTimeAgo(l.time) : '?';
+        const sideLabel = l.side === 'buy' ? 'Buy' : 'Sell';
+        const rowClass = l.stock <= 0 ? ' style="opacity:0.4"' : '';
+        html += `<tr${rowClass}>
+            <td>${priceStr}</td>
+            <td>${anlysEscape(l.city)}</td>
+            <td style="font-size:0.65rem;color:var(--text-muted);">${coords}</td>
+            <td>${stocked}</td>
+            <td>${sideLabel}</td>
+            <td style="font-size:0.65rem;">${ago}</td>
+        </tr>`;
+    }
+
+    html += `</tbody></table></div>
+        <div style="padding:0.5rem;color:var(--text-muted);font-size:0.65rem;">${sorted.length} listings (${sorted.filter(l => l.stock > 0).length} stocked)</div>
+    </div>`;
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+
+    // Close handlers
+    overlay.querySelector('.anlys-listings-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+function anlysTimeAgo(epochMs) {
+    const diff = Date.now() - epochMs;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
 }
 
 // ============================================

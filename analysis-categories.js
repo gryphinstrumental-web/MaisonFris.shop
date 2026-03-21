@@ -157,13 +157,91 @@ const ANLYS_KNOWN_MATERIALS = new Set([
     'Vault Bastion', 'City Bastion',
 ]);
 
+// Ore & raw minerals
+const ANLYS_ORE_ITEMS = new Set([
+    'Diamond', 'Diamond Block', 'Block of Diamond',
+    'Iron Ingot', 'Iron Block', 'Block of Iron', 'Raw Iron',
+    'Raw Gold', 'Raw Copper', 'Copper Ingot', 'Copper Block', 'Block of Copper',
+    'Emerald', 'Emerald Block', 'Block of Emerald',
+    'Gold Ingot', 'Gold Block', 'Block of Gold', 'Gold Nugget',
+    'Redstone Dust', 'Redstone Block', 'Block of Redstone',
+    'Lapis Lazuli', 'Lapis Block', 'Block of Lapis Lazuli', 'Lapis Lazuli Block',
+    'Nether Quartz', 'Quartz Block',
+    'Coal', 'Coal Block',
+    'Amethyst Shard', 'Amethyst Cluster',
+    'Ancient Debris', 'Netherite Scrap', 'Netherite Ingot', 'Netherite Block',
+    'Nether Star', 'Nether Gold Ore', 'Nether Quartz Ore',
+]);
+
+// Aesthetics — decorative / cosmetic items
+const ANLYS_AESTHETICS_ITEMS = new Set([
+    'Flower Pot', 'Painting', 'Item Frame', 'Glow Item Frame',
+    'Candle', 'White Candle', 'Red Candle', 'Blue Candle', 'Green Candle',
+    'Yellow Candle', 'Orange Candle', 'Purple Candle', 'Pink Candle',
+    'Light Blue Candle', 'Lime Candle', 'Cyan Candle', 'Magenta Candle',
+    'Gray Candle', 'Light Gray Candle', 'Brown Candle', 'Black Candle',
+    'Lantern', 'Soul Lantern', 'Chain',
+    'Armor Stand', 'Head', 'Player Head',
+    'Bell', 'Decorated Pot',
+    'Glow Lichen', 'Moss Carpet', 'Spore Blossom', 'Hanging Roots',
+    'Sea Pickle', 'Turtle Egg',
+    'Lightning Rod',
+]);
+const ANLYS_AESTHETICS_PATTERNS = [
+    /^.*Dye$/, /^.*Banner$/, /^.*Carpet$/, /^.*Candle$/,
+    /^.*Head$/, /^.*Skull$/,
+    /^.*Pottery Sherd$/, /^Decorated Pot/,
+];
+
+// Food — edible items
+const ANLYS_FOOD_ITEMS = new Set([
+    'Bread', 'Cookie', 'Cake', 'Pumpkin Pie', 'Beetroot Soup', 'Mushroom Stew',
+    'Cooked Beef', 'Cooked Porkchop', 'Cooked Chicken', 'Cooked Mutton',
+    'Cooked Salmon', 'Cooked Cod', 'Cooked Rabbit',
+    'Raw Beef', 'Raw Porkchop', 'Raw Chicken', 'Raw Mutton', 'Raw Rabbit',
+    'Salmon', 'Cod', 'Tropical Fish', 'Pufferfish',
+    'Apple', 'Golden Apple', 'Enchanted Golden Apple',
+    'Melon Slice', 'Sweet Berries', 'Glow Berries',
+    'Baked Potato', 'Potato', 'Carrot', 'Beetroot',
+    'Dried Kelp', 'Honey Bottle', 'Rabbit Stew',
+    'Suspicious Stew', 'Golden Carrot',
+    'Spider Eye', 'Rotten Flesh', 'Chorus Fruit',
+]);
+
+// Raw materials — natural resources, not processed
+const ANLYS_RAW_ITEMS = new Set([
+    'Sand', 'Red Sand', 'Gravel', 'Clay Ball', 'Clay',
+    'Granite', 'Diorite', 'Andesite',
+    'Deepslate', 'Tuff', 'Calcite',
+    'Netherrack', 'Soul Sand', 'Soul Soil',
+    'Basalt', 'Blackstone', 'Magma Block',
+    'End Stone', 'Obsidian', 'Crying Obsidian',
+    'Prismarine', 'Prismarine Shard', 'Prismarine Crystals',
+    'Cobblestone', 'Stone', 'Dirt', 'Coarse Dirt', 'Rooted Dirt',
+    'Podzol', 'Mycelium', 'Mud', 'Grass Block',
+    'Ice', 'Packed Ice', 'Blue Ice', 'Snow', 'Snow Block',
+    'Glowstone', 'Glowstone Dust',
+    'Bone Meal', 'Slime Ball', 'Magma Cream',
+    'Ink Sac', 'Glow Ink Sac', 'Feather', 'Leather',
+    'Rabbit Hide', 'Rabbit Foot', 'Phantom Membrane',
+    'String', 'Gunpowder', 'Bone', 'Ender Pearl',
+    'Ghast Tear', 'Blaze Rod', 'Blaze Powder',
+    'Shulker Shell', 'Heart of the Sea', 'Sponge', 'Wet Sponge',
+    'Egg', 'Honeycomb', 'Stick',
+]);
+
 function anlysGetCategory(commodity) {
     const name = commodity.replace(/ \[.*\]$/, '');
     // Check user overrides first
     if (anlysCustomCats[name]?.cat) return anlysCustomCats[name].cat;
     if (ANLYS_XP_ITEMS.has(name)) return 'xp';
     if (ANLYS_CURRENCY_ITEMS.has(name)) return 'currency';
+    if (ANLYS_ORE_ITEMS.has(name)) return 'ore';
+    if (ANLYS_FOOD_ITEMS.has(name)) return 'food';
     if (ANLYS_LORE_ITEMS.has(name)) return 'lore';
+    if (ANLYS_AESTHETICS_ITEMS.has(name)) return 'aesthetics';
+    for (const p of ANLYS_AESTHETICS_PATTERNS) { if (p.test(name)) return 'aesthetics'; }
+    if (ANLYS_RAW_ITEMS.has(name)) return 'raw';
     if (ANLYS_BUILDING_ITEMS.has(name)) return 'building';
     for (const p of ANLYS_TOOLS_PATTERNS) { if (p.test(name)) return 'tools'; }
     for (const p of ANLYS_BUILDING_PATTERNS) { if (p.test(name)) return 'building'; }
@@ -231,18 +309,23 @@ const ANLYS_NONFARMABLE = new Set([
     'Nether Gold Ore', 'Nether Quartz Ore',
 ]);
 
+const ANLYS_NONFARMABLE_PATTERNS = [/Banner$/];
+
 function anlysIsFarmable(commodity) {
     const name = commodity.replace(/ \[.*\]$/, '');
     // Check user overrides first
     if (anlysCustomCats[name]?.farm !== undefined) return anlysCustomCats[name].farm;
     if (ANLYS_FARMABLE.has(name)) return true;
     if (ANLYS_NONFARMABLE.has(name)) return false;
+    for (const p of ANLYS_NONFARMABLE_PATTERNS) { if (p.test(name)) return false; }
     return null;
 }
 
 const ANLYS_CAT_LABELS = {
-    xp: 'XP', building: 'BLD', tools: 'T&A', currency: 'CUR', lore: 'LORE'
+    xp: 'XP', building: 'BLD', tools: 'T&A', currency: 'CUR', lore: 'LORE',
+    aesthetics: 'AES', ore: 'ORE', food: 'FOOD', raw: 'RAW'
 };
 const ANLYS_CAT_COLORS = {
-    xp: '#6c6', building: '#8ac', tools: '#c8a', currency: '#dd6', lore: '#999'
+    xp: '#6c6', building: '#8ac', tools: '#c8a', currency: '#dd6', lore: '#999',
+    aesthetics: '#d8a', ore: '#c96', food: '#e88', raw: '#ab8'
 };

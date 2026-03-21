@@ -165,7 +165,7 @@ function navigate() {
         document.body.classList.remove('landing');
         if (typeof loadTerminalAdmin === 'function') loadTerminalAdmin();
     } else if (path === '/analysis') {
-        if (!currentUser || !isAdmin) {
+        if (!currentUser || !(isAdmin || (userProfile && userProfile.is_surveyor))) {
             history.replaceState(null, '', '/home');
             document.getElementById('landingView').classList.add('active');
             document.body.classList.add('landing');
@@ -243,9 +243,9 @@ function updateAuthUI() {
     const terminalAdminLink = document.getElementById('terminalAdminLink');
     if (terminalAdminLink) terminalAdminLink.style.display = isAdmin ? '' : 'none';
 
-    // Show/hide analysis nav link (admin only)
+    // Show/hide analysis nav link (admin + surveyor)
     const analysisLink = document.getElementById('analysisLink');
-    if (analysisLink) analysisLink.style.display = isAdmin ? '' : 'none';
+    if (analysisLink) analysisLink.style.display = (isAdmin || (userProfile && userProfile.is_surveyor)) ? '' : 'none';
 }
 
 function toggleAdminView() {
