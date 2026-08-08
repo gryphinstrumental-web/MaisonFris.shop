@@ -234,9 +234,11 @@ function ncFindNearbyShops(prop) {
         if (!grouped[key]) grouped[key] = { pos: e.pos, exchanges: [] };
         grouped[key].exchanges.push(e);
     });
+    const hasBoundary = Array.isArray(prop.boundary) && prop.boundary.length >= 3;
     return Object.values(grouped)
         .map(g => ({ ...g, dist: Math.hypot(g.pos.x - prop.x, g.pos.z - prop.z) }))
-        .filter(g => g.dist <= NC_SHOP_LINK_RADIUS)
+        .filter(g => g.dist <= NC_SHOP_LINK_RADIUS
+            || (hasBoundary && ncPointInBoundary(g.pos.x, g.pos.z, prop.boundary)))
         .sort((a, b) => a.dist - b.dist);
 }
 
@@ -419,7 +421,8 @@ function ncFilterShops() {
 
         if (hideMissing) {
             const nearest = ncShopNearestProperty(e.pos);
-            const assoc = ncGetLinkedProperty(link) || (nearest && typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null);
+            const assoc = ncGetLinkedProperty(link) || ncShopBoundaryProperty(e.pos)
+                || (nearest && typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null);
             if (!assoc) return false;
         }
 
@@ -489,8 +492,13 @@ function ncRenderShopResults() {
         } else if (isStale) {
             nearLine = `<div class="nc-shop-near" style="color:var(--text-muted);font-style:italic;">Inactive</div>`;
         } else {
-            const nearest = ncShopNearestProperty(e.pos);
-            if (nearest) nearLine = `<div class="nc-shop-near">Near ${ncEsc(nearest.name)} (${nearest.dist}m)</div>`;
+            const bProp = ncShopBoundaryProperty(e.pos);
+            if (bProp) {
+                nearLine = `<div class="nc-shop-near" style="color:#00bcd4;">&#x25A3; ${ncEsc(bProp.name)}</div>`;
+            } else {
+                const nearest = ncShopNearestProperty(e.pos);
+                if (nearest) nearLine = `<div class="nc-shop-near">Near ${ncEsc(nearest.name)} (${nearest.dist}m)</div>`;
+            }
         }
         const staleClass = isStale ? ' nc-shop-stale' : '';
 
@@ -590,6 +598,37 @@ function ncShopNearestProperty(pos) {
     return best ? { id: best.id, name: best.name, dist: Math.round(bestDist) } : null;
 }
 
+// Point-in-polygon (ray cast) against a boundary's [[x,z],...] block corners.
+// Shop coords are block positions — test the block center (+0.5).
+function ncPointInBoundary(px, pz, poly) {
+    const x = px + 0.5, z = pz + 0.5;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], zi = poly[i][1];
+        const xj = poly[j][0], zj = poly[j][1];
+        if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+}
+
+// Property whose drawn boundary contains this shop position (smallest wins if nested)
+function ncShopBoundaryProperty(pos) {
+    if (typeof ncProperties === 'undefined') return null;
+    let best = null, bestArea = Infinity;
+    for (const prop of ncProperties) {
+        const b = prop.boundary;
+        if (!Array.isArray(b) || b.length < 3) continue;
+        if (!ncPointInBoundary(pos.x, pos.z, b)) continue;
+        let area = 0;
+        for (let i = 0, j = b.length - 1; i < b.length; j = i++) {
+            area += (b[j][0] + b[i][0]) * (b[j][1] - b[i][1]);
+        }
+        area = Math.abs(area / 2);
+        if (area < bestArea) { bestArea = area; best = prop; }
+    }
+    return best;
+}
+
 function ncCopyText(el, text) {
     navigator.clipboard.writeText(text);
     const orig = el.textContent;
@@ -603,11 +642,12 @@ function ncShopPopupHTML(exchanges) {
     const posKey = `${p.x},${p.y},${p.z}`;
     const link = ncGetShopLink(p);
     const linkedProp = ncGetLinkedProperty(link);
+    const boundaryProp = ncShopBoundaryProperty(p);
     const nearest = ncShopNearestProperty(p);
     const canEdit = ncSurveyMode && typeof ncCanEdit === 'function' && ncCanEdit();
     const isStale = link && link.stale;
 
-    const assocProp = linkedProp || (nearest ? (typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null) : null);
+    const assocProp = linkedProp || boundaryProp || (nearest ? (typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null) : null);
     const imgUrl = assocProp && sanitizeUrl(assocProp.image_url);
 
     let h = `<div class="nc-shop-popup" data-key="${posKey}">`;
@@ -622,6 +662,8 @@ function ncShopPopupHTML(exchanges) {
         h += `<div style="font-size:0.8rem;margin-bottom:0.15rem;"><span style="color:#4caf50;font-weight:600;">Confirmed</span> <strong onclick="ncGoToRegistry('${linkedProp.id}')" style="cursor:pointer;text-decoration:underline dotted;color:#00bcd4;" title="View in registry">${ncEsc(linkedProp.name)}</strong></div>`;
     } else if (isStale) {
         h += `<div style="font-size:0.75rem;margin-bottom:0.15rem;color:var(--text-muted);font-style:italic;">Marked inactive</div>`;
+    } else if (boundaryProp) {
+        h += `<div style="font-size:0.8rem;margin-bottom:0.15rem;"><span style="color:#00bcd4;font-weight:600;">Inside</span> <strong onclick="ncGoToRegistry('${boundaryProp.id}')" style="cursor:pointer;text-decoration:underline dotted;color:#00bcd4;" title="View in registry">${ncEsc(boundaryProp.name)}</strong></div>`;
     } else if (nearest) {
         h += `<div style="font-size:0.75rem;margin-bottom:0.15rem;"><span style="color:#00bcd4;">Nearby</span> <strong onclick="ncGoToRegistry('${nearest.id}')" style="cursor:pointer;text-decoration:underline dotted;color:#00bcd4;" title="View in registry">${ncEsc(nearest.name)}</strong> <span style="color:var(--text-muted);">(${nearest.dist}m)</span></div>`;
     }
@@ -679,7 +721,8 @@ function ncShopPopupHTML(exchanges) {
         h += `<div style="margin-top:0.4rem;border-top:1px solid rgba(184,180,204,0.15);padding-top:0.3rem;display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:center;">`;
         if (!link || !linkedProp) {
             // No confirmed link — show confirm button with nearest pre-selected
-            h += `<button class="nc-shop-link-btn" data-action="confirm" data-key="${posKey}" style="font-size:0.62rem;padding:0.2rem 0.5rem;background:rgba(76,175,80,0.2);border:1px solid #4caf50;border-radius:4px;color:#4caf50;cursor:pointer;">Confirm${nearest ? ' (' + ncEsc(nearest.name) + ')' : ''}</button>`;
+            const confirmTarget = boundaryProp || nearest;
+            h += `<button class="nc-shop-link-btn" data-action="confirm" data-key="${posKey}" style="font-size:0.62rem;padding:0.2rem 0.5rem;background:rgba(76,175,80,0.2);border:1px solid #4caf50;border-radius:4px;color:#4caf50;cursor:pointer;">Confirm${confirmTarget ? ' (' + ncEsc(confirmTarget.name) + ')' : ''}</button>`;
             h += `<button class="nc-shop-link-btn" data-action="assign" data-key="${posKey}" style="font-size:0.62rem;padding:0.2rem 0.5rem;background:rgba(0,188,212,0.15);border:1px solid #00bcd4;border-radius:4px;color:#00bcd4;cursor:pointer;">Assign Other</button>`;
             h += `<button class="nc-shop-link-btn" data-action="stale" data-key="${posKey}" style="font-size:0.62rem;padding:0.2rem 0.5rem;background:rgba(224,64,64,0.15);border:1px solid #e04040;border-radius:4px;color:#e04040;cursor:pointer;">Mark Inactive</button>`;
         } else {
@@ -981,6 +1024,8 @@ document.addEventListener('click', async function(e) {
 });
 
 async function ncShopLinkConfirm(x, y, z) {
+    const bProp = ncShopBoundaryProperty({ x, z });
+    if (bProp) { await ncShopLinkSave(bProp.id, x, y, z); return; }
     const nearest = ncShopNearestProperty({ x, z });
     if (!nearest) { alert('No nearby properties found.'); return; }
     await ncShopLinkSave(nearest.id, x, y, z);
@@ -1165,7 +1210,8 @@ function ncShopTableRow(e) {
     const link = ncGetShopLink(e.pos);
     const linkedProp = ncGetLinkedProperty(link);
     const nearest = ncShopNearestProperty(e.pos);
-    const assocProp = linkedProp || (nearest && typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null);
+    const assocProp = linkedProp || ncShopBoundaryProperty(e.pos)
+        || (nearest && typeof ncProperties !== 'undefined' ? ncProperties.find(p => p.id === nearest.id) : null);
     const propName = assocProp ? assocProp.name : '';
     const propId = assocProp ? assocProp.id : null;
     const discordContact = (link && link.discord_contact) || (assocProp && assocProp.discord_contact) || '';
