@@ -613,6 +613,41 @@ function ncPointInBoundary(px, pz, poly) {
     return inside;
 }
 
+// ============================================
+// Property Activity — live verdict from the Tradex chests tagged to a
+// property (boundary containment + confirmed links). Computed on demand,
+// never stored, so it is always as fresh as the Tradex cache.
+// ============================================
+const NC_ACTIVITY_STALE_DAYS = 14;
+const NC_ACTIVITY_COLORS = { active: '#4caf50', unstocked: '#e6a817', stale: '#e08080', noshop: '#888' };
+
+function ncGetActivity(prop) {
+    if (prop.type !== 'Commercial') return null;
+    if (!ncShopDataReady) return null;
+    const hasBoundary = Array.isArray(prop.boundary) && prop.boundary.length >= 3;
+    const links = (prop._shopLinks || []).filter(l => !l.dismissed);
+    if (!hasBoundary && !links.length) return null; // no way to attribute chests yet
+    const exs = ncShopExchanges.filter(e =>
+        (hasBoundary && ncPointInBoundary(e.pos.x, e.pos.z, prop.boundary)) ||
+        links.some(l => l.shop_x === e.pos.x && l.shop_y === e.pos.y && l.shop_z === e.pos.z)
+    );
+    if (!exs.length) {
+        return { verdict: 'noshop', label: 'No Chests', color: NC_ACTIVITY_COLORS.noshop,
+            stocked: 0, total: 0, lastSeen: null, detail: 'no Tradex chests on property' };
+    }
+    const lastSeen = Math.max(...exs.map(e => e.time));
+    const stocked = exs.filter(e => e.stock > 0).length;
+    const ageDays = (Date.now() - lastSeen) / 86400000;
+    let verdict, label;
+    if (ageDays > NC_ACTIVITY_STALE_DAYS) { verdict = 'stale'; label = 'Stale'; }
+    else if (!stocked) { verdict = 'unstocked'; label = 'Unstocked'; }
+    else { verdict = 'active'; label = 'Active'; }
+    return {
+        verdict, label, color: NC_ACTIVITY_COLORS[verdict], stocked, total: exs.length, lastSeen,
+        detail: `${stocked}/${exs.length} stocked · seen ${ncFormatAge(lastSeen)}`
+    };
+}
+
 // Property whose drawn boundary contains this shop position (smallest wins if nested)
 function ncShopBoundaryProperty(pos) {
     if (typeof ncProperties === 'undefined') return null;

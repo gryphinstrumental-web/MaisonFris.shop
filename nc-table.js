@@ -7,6 +7,7 @@ let ncDirtyRows = new Set(); // track modified property ids/indices for save
 let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
 let ncTableFilterType = null;   // active type filter for table
 let ncTableFilterStatus = null; // active status filter for table
+let ncTableFilterActivity = null; // Tradex activity filter (active/unstocked/stale/noshop/inactive)
 
 function renderNCTable(properties, filter = '') {
     const body = document.getElementById('ncTableBody');
@@ -37,6 +38,14 @@ function renderNCTable(properties, filter = '') {
     // Filter by status
     if (ncTableFilterStatus) {
         rows = rows.filter(r => r.prop.status === ncTableFilterStatus);
+    }
+    // Filter by Tradex activity
+    if (ncTableFilterActivity) {
+        rows = rows.filter(r => {
+            const a = (typeof ncGetActivity === 'function') ? ncGetActivity(r.prop) : null;
+            if (ncTableFilterActivity === 'inactive') return a && a.verdict !== 'active';
+            return a && a.verdict === ncTableFilterActivity;
+        });
     }
 
     // Sort
@@ -109,6 +118,19 @@ function renderNCTable(properties, filter = '') {
             const fineTh = document.createElement('th'); fineTh.textContent = 'Fine'; thead.appendChild(fineTh);
         }
         const compTh = document.createElement('th'); compTh.textContent = 'Comp'; compTh.title = 'Compliance'; thead.appendChild(compTh);
+        // Activity column (Tradex verdict) with its own filter dropdown
+        const actTh = document.createElement('th');
+        const actSel = document.createElement('select');
+        actSel.className = 'nc-th-filter';
+        actSel.innerHTML = '<option value="">Activity</option><option value="inactive">Any Inactive</option><option value="active">Active</option><option value="unstocked">Unstocked</option><option value="stale">Stale</option><option value="noshop">No Chests</option>';
+        actSel.value = ncTableFilterActivity || '';
+        actSel.addEventListener('change', () => {
+            ncTableFilterActivity = actSel.value || null;
+            renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
+        });
+        actSel.addEventListener('click', e => e.stopPropagation());
+        actTh.appendChild(actSel);
+        thead.appendChild(actTh);
     }
 
     rows.forEach(({ prop, i }) => {
@@ -144,6 +166,7 @@ function renderNCTable(properties, filter = '') {
             <td><button class="nc-table-log" data-prop-idx="${i}" title="Surveyor's Log">Log</button></td>
             <td><button class="nc-table-log nc-table-fine" data-prop-idx="${i}" title="Fine Log">Fine</button></td>` : ''}
             <td>${(() => { const c = ncGetCompliance(prop); return c ? (c.compliant ? '<span title="Compliant" style="color:#4caf50;">\u2705</span>' : '<span title="Non-Compliant (' + c.passed + '/' + c.total + ')" style="color:#e04040;">\u274C</span>') : '<span style="color:var(--text-muted);">—</span>'; })()}</td>
+            <td>${(() => { const a = (typeof ncGetActivity === 'function') ? ncGetActivity(prop) : null; return a ? `<span title="${ncEsc(a.detail)}" style="background:${a.color}33;color:${a.color};padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap;">${a.label}</span>` : '<span style="color:var(--text-muted);">—</span>'; })()}</td>
         `;
 
         // Locate button

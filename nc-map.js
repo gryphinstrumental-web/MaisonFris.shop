@@ -601,8 +601,9 @@ async function loadNewCallisto() {
             ncProperties.forEach(p => { p._shopLinks = []; });
         }
 
-        // Background-fetch Tradex data for proximity matching
-        ncEnsureShopData();
+        // Background-fetch Tradex data, then re-render so activity verdicts
+        // and boundary tints appear once it arrives
+        ncEnsureShopData().then(() => { if (!ncShopMode) ncRefreshAll(); });
 
         ncRefreshAll();
         const countEl = document.getElementById('ncPropsCount');
@@ -695,6 +696,17 @@ function buildPopupHTML(prop, canEdit, pi) {
         h += `<div class="nc-prop-detail"><span>Compliance</span><span class="value">${badge}</span></div>`;
     }
 
+    // Tradex activity (live, from chests inside the boundary / confirmed links)
+    if (typeof ncGetActivity === 'function') {
+        const act = ncGetActivity(prop);
+        if (act) {
+            h += `<div class="nc-prop-detail"><span>Activity</span><span class="value"><span style="background:${act.color}33;color:${act.color};padding:0.1rem 0.4rem;border-radius:3px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.04em;">${act.label}</span> <span style="font-size:0.68rem;color:var(--text-muted);">${act.detail}</span></span></div>`;
+            const mismatch = (prop.shopchests && act.verdict === 'noshop') ? 'Shopchests flag is set but Tradex sees no chests'
+                : (!prop.shopchests && act.total > 0) ? 'Tradex sees chests but the Shopchests flag is unset' : null;
+            if (mismatch) h += `<div class="nc-prop-detail"><span></span><span class="value" style="color:#e6a817;font-size:0.68rem;">\u26A0 ${mismatch}</span></div>`;
+        }
+    }
+
     // Historic designation
     h += `<div class="nc-prop-detail"><span>Protected</span><span class="value nc-popup-toggle" data-pi="${pi}" data-field="historic">${prop.historic ? '\u2705' : '\u274C'}</span></div>`;
 
@@ -779,8 +791,13 @@ function renderNCMarkers(properties) {
     properties.forEach((prop, pi) => {
         if (!Array.isArray(prop.boundary) || prop.boundary.length < 3) return;
         const color = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+        // Inactive commercial shops get a dashed outline in the verdict color
+        const act = (typeof ncGetActivity === 'function') ? ncGetActivity(prop) : null;
+        const inactive = act && act.verdict !== 'active';
         const poly = L.polygon(prop.boundary.map(([x, z]) => [-z, x]), {
-            color, weight: 2, opacity: 0.75, fillColor: color, fillOpacity: 0.12,
+            color: inactive ? act.color : color,
+            dashArray: inactive ? '6 4' : null,
+            weight: 2, opacity: 0.75, fillColor: color, fillOpacity: 0.12,
             className: 'nc-boundary-poly'
         }).addTo(ncMap);
         poly._ncIndex = pi;
@@ -1185,6 +1202,7 @@ let ncFilterStatus = null; // active status filter
 let ncFilterUnoccupied = false; // show only unoccupied
 let ncFilterNonCompliant = false; // show only non-compliant commercial
 let ncFilterProtected = false;    // show only historically protected
+let ncFilterInactive = false;     // show only commercial with non-active Tradex verdict
 
 function filterNCMarkers(query) {
     const q = query.toLowerCase().trim();
@@ -1215,6 +1233,11 @@ function filterNCMarkers(query) {
         // Check protected filter
         if (ncFilterProtected && !p.historic) {
             ncMap.removeLayer(marker); return;
+        }
+        // Check inactive-shop filter (Tradex activity verdict)
+        if (ncFilterInactive) {
+            const act = (typeof ncGetActivity === 'function') ? ncGetActivity(p) : null;
+            if (!act || act.verdict === 'active') { ncMap.removeLayer(marker); return; }
         }
         // Check text search
         const s = [p.name, p.owner, p.type, p.address, p.status].filter(Boolean).join(' ').toLowerCase();
@@ -1251,6 +1274,7 @@ function ncClearAllFilters() {
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
     ncFilterProtected = false;
+    ncFilterInactive = false;
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     document.getElementById('ncSearchInput').value = '';
     const uf = document.getElementById('ncUnoccupiedFilter');
@@ -1386,6 +1410,14 @@ document.getElementById('ncProtectedFilter').addEventListener('click', () => {
     filterNCMarkers('');
 });
 
+// Inactive-shops filter (Tradex activity) — stacks with other filters
+document.getElementById('ncActivityFilter').addEventListener('click', () => {
+    const el = document.getElementById('ncActivityFilter');
+    ncFilterInactive = !ncFilterInactive;
+    el.classList.toggle('active', ncFilterInactive);
+    filterNCMarkers(document.getElementById('ncSearchInput').value);
+});
+
 // Show All buttons
 document.getElementById('ncTypeShowAll').addEventListener('click', () => {
     ncFilterType = null;
@@ -1393,6 +1425,7 @@ document.getElementById('ncTypeShowAll').addEventListener('click', () => {
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
     ncFilterProtected = false;
+    ncFilterInactive = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf1 = document.getElementById('ncUnoccupiedFilter');
@@ -1405,6 +1438,7 @@ document.getElementById('ncStatusShowAll').addEventListener('click', () => {
     ncFilterUnoccupied = false;
     ncFilterNonCompliant = false;
     ncFilterProtected = false;
+    ncFilterInactive = false;
     document.getElementById('ncSearchInput').value = '';
     document.querySelectorAll('.nc-legend-item.active').forEach(el => el.classList.remove('active'));
     const uf2 = document.getElementById('ncUnoccupiedFilter');
