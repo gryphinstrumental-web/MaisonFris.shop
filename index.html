@@ -1240,6 +1240,11 @@
             cursor: grabbing !important;
         }
 
+        /* Boundary polygons: smooth hover glow */
+        #ncMap path.nc-boundary-poly {
+            transition: fill-opacity 0.18s ease, stroke-opacity 0.18s ease, filter 0.18s ease;
+        }
+
         /* Boundary drawing mode: let clicks pass through markers/polygons to the map */
         #ncMap.nc-drawing .leaflet-overlay-pane *,
         #ncMap.nc-drawing .leaflet-marker-pane *,
@@ -4729,7 +4734,7 @@
     </div>
 
     <script src="app.js?v=166"></script>
-    <script src="nc-map.js?v=168"></script>
+    <script src="nc-map.js?v=169"></script>
     <script src="nc-table.js?v=161"></script>
     <script src="nc-modals.js?v=159"></script>
     <script src="nc-shops.js?v=186"></script>

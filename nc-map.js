@@ -780,12 +780,22 @@ function renderNCMarkers(properties) {
         if (!Array.isArray(prop.boundary) || prop.boundary.length < 3) return;
         const color = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
         const poly = L.polygon(prop.boundary.map(([x, z]) => [-z, x]), {
-            color, weight: 2, opacity: 0.75, fillColor: color, fillOpacity: 0.12
+            color, weight: 2, opacity: 0.75, fillColor: color, fillOpacity: 0.12,
+            className: 'nc-boundary-poly'
         }).addTo(ncMap);
         poly._ncIndex = pi;
         poly.on('click', () => {
             const m = ncMarkers.find(mk => mk._ncIndex === pi);
             if (m && ncMap.hasLayer(m)) m.openPopup();
+        });
+        // Hover glow: brighten the interior + soft glow in the property's color
+        poly.on('mouseover', () => {
+            poly.setStyle({ fillOpacity: 0.35, weight: 3, opacity: 1 });
+            if (poly._path) poly._path.style.filter = `drop-shadow(0 0 6px ${color})`;
+        });
+        poly.on('mouseout', () => {
+            poly.setStyle({ fillOpacity: 0.12, weight: 2, opacity: 0.75 });
+            if (poly._path) poly._path.style.filter = '';
         });
         ncBoundaryPolys.push(poly);
     });
