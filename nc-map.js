@@ -320,16 +320,18 @@ async function loadNewCallisto() {
                 if (!confirm(`Remove boundary for ${prop.name || 'this property'}?`)) return;
                 try {
                     const now = new Date().toISOString();
-                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                    const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
                         method: 'PATCH', headers: restHeaders(),
                         body: JSON.stringify({ boundary: null, updated_at: now })
                     });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
                     if (typeof ncLogChange === 'function') ncLogChange(prop.id, 'boundary', `${prop.boundary?.length || 0} corners`, 'removed');
                     prop.boundary = null;
                     ncMap.closePopup();
                     renderNCMarkers(ncProperties);
                 } catch (err) {
                     console.error('Failed to remove boundary:', err);
+                    alert('Failed to remove boundary — check the console.');
                 }
             });
         }
@@ -605,6 +607,7 @@ async function loadNewCallisto() {
         ncRefreshAll();
         const countEl = document.getElementById('ncPropsCount');
         if (countEl) countEl.textContent = `${ncProperties.length} properties`;
+        ncMaybeResumeDraft();
     } catch (err) {
         console.error('Failed to load NC properties:', err);
         // Fallback to GitHub JSON
@@ -822,19 +825,60 @@ function renderNCMarkers(properties) {
 // Click to place corners (snapped to block corners), right-click to undo,
 // click the first corner / Enter to finish, Esc to cancel.
 // ============================================
-function ncStartDrawBoundary(pi) {
+// In-progress drawings auto-save to localStorage after every corner, so a
+// refresh, crash, or mode switch never loses work. The draft clears only on
+// successful save or explicit cancel (Esc / Cancel button).
+const NC_DRAFT_KEY = 'ncBoundaryDraft';
+
+function ncSaveDraft() {
+    const st = ncDrawState;
+    const prop = st ? ncProperties[st.pi] : null;
+    if (!st || !prop?.id) return;
+    try { localStorage.setItem(NC_DRAFT_KEY, JSON.stringify({ propId: prop.id, pts: st.pts })); } catch (e) {}
+}
+
+function ncClearDraft() {
+    try { localStorage.removeItem(NC_DRAFT_KEY); } catch (e) {}
+}
+
+function ncGetDraft() {
+    try {
+        const d = JSON.parse(localStorage.getItem(NC_DRAFT_KEY));
+        return (d && d.propId && Array.isArray(d.pts) && d.pts.length) ? d : null;
+    } catch (e) { return null; }
+}
+
+function ncMaybeResumeDraft() {
+    if (ncDrawState) return;
+    if (typeof ncShopMode !== 'undefined' && ncShopMode) return;
+    if (!ncCanEdit()) return;
+    const d = ncGetDraft();
+    if (!d) return;
+    const pi = ncProperties.findIndex(p => p.id === d.propId);
+    if (pi < 0) { ncClearDraft(); return; }
+    const name = ncProperties[pi].name || 'this property';
+    if (confirm(`Resume unsaved boundary for ${name}? (${d.pts.length} corner${d.pts.length !== 1 ? 's' : ''} restored)`)) {
+        ncStartDrawBoundary(pi, d.pts);
+    } else {
+        ncClearDraft();
+    }
+}
+
+function ncStartDrawBoundary(pi, resumePts) {
     const prop = ncProperties[pi];
     if (!prop?.id) { alert('Save the property first, then draw its boundary.'); return; }
     if (ncDrawState) ncTeardownDraw();
     ncMap.closePopup();
     ncDrawState = {
         pi,
-        pts: [],       // [[x, z], ...] block corners
+        // [[x, z], ...] block corners
+        pts: Array.isArray(resumePts) ? resumePts.map(p => [p[0], p[1]]) : [],
         group: L.layerGroup().addTo(ncMap),
         rubber: null   // dashed line from last corner to cursor
     };
     document.getElementById('ncMap').classList.add('nc-drawing');
     document.getElementById('ncDrawHint').style.display = 'flex';
+    ncDrawRedraw();
     ncUpdateDrawHint();
     ncMap.on('click', ncDrawAddPoint);
     ncMap.on('mousemove', ncDrawMouseMove);
@@ -856,6 +900,7 @@ function ncDrawAddPoint(e) {
     const last = st.pts[st.pts.length - 1];
     if (last && last[0] === x && last[1] === z) return; // dblclick double-fire
     st.pts.push([x, z]);
+    ncSaveDraft();
     ncDrawRedraw();
     ncUpdateDrawHint();
 }
@@ -873,14 +918,21 @@ function ncDrawUndoPoint() {
     const st = ncDrawState;
     if (!st || !st.pts.length) return;
     st.pts.pop();
+    ncSaveDraft();
     ncDrawRedraw();
     ncUpdateDrawHint();
+}
+
+// Explicit cancel — the only path (besides a successful save) that discards the draft
+function ncCancelDraw() {
+    ncClearDraft();
+    ncTeardownDraw();
 }
 
 function ncDrawKeydown(e) {
     if (!ncDrawState) return;
     if (e.key === 'Enter') { e.preventDefault(); ncFinishDrawBoundary(); }
-    else if (e.key === 'Escape') { e.preventDefault(); ncTeardownDraw(); }
+    else if (e.key === 'Escape') { e.preventDefault(); ncCancelDraw(); }
 }
 
 function ncDrawRedraw() {
@@ -921,22 +973,35 @@ async function ncFinishDrawBoundary() {
     if (!st) return;
     if (st.pts.length < 3) { ncUpdateDrawHint('Need at least 3 corners to close the boundary'); return; }
     const prop = ncProperties[st.pi];
-    const pts = st.pts;
+    const pts = st.pts.slice();
     const hadBoundary = Array.isArray(prop.boundary) && prop.boundary.length >= 3;
-    ncTeardownDraw();
+    const finishBtn = document.getElementById('ncDrawFinish');
+    finishBtn.disabled = true;
+    ncUpdateDrawHint('Saving…');
     try {
         const now = new Date().toISOString();
-        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+        const resp = await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
             method: 'PATCH', headers: restHeaders(),
             body: JSON.stringify({ boundary: pts, last_surveyed: now, updated_at: now })
         });
+        if (!resp.ok) {
+            const body = await resp.text();
+            if (body.includes('boundary') && body.includes('does not exist')) {
+                alert('The database is missing the boundary column.\n\nRun migrations/nc_property_boundaries.sql in Supabase Dashboard > SQL Editor, then press Enter or Finish to retry — your drawing is kept.');
+            }
+            throw new Error(`HTTP ${resp.status}: ${body}`);
+        }
         if (typeof ncLogChange === 'function') ncLogChange(prop.id, 'boundary', hadBoundary ? 'redrawn' : null, `${pts.length} corners`);
         prop.boundary = pts;
         prop.last_surveyed = now;
+        ncClearDraft();
+        ncTeardownDraw();
         renderNCMarkers(ncProperties);
     } catch (err) {
+        // Keep the drawing session (and the localStorage draft) so nothing is lost
         console.error('Failed to save boundary:', err);
-        alert('Failed to save boundary — check the console.');
+        finishBtn.disabled = false;
+        ncUpdateDrawHint('SAVE FAILED — drawing kept. Press Enter or Finish to retry.');
     }
 }
 
@@ -954,7 +1019,7 @@ function ncTeardownDraw() {
 
 document.getElementById('ncDrawFinish').addEventListener('click', ncFinishDrawBoundary);
 document.getElementById('ncDrawUndo').addEventListener('click', ncDrawUndoPoint);
-document.getElementById('ncDrawCancel').addEventListener('click', ncTeardownDraw);
+document.getElementById('ncDrawCancel').addEventListener('click', ncCancelDraw);
 
 function ncToggleLabels() {
     ncLabelsVisible = !ncLabelsVisible;

@@ -383,6 +383,8 @@ function ncExitShopMode() {
     filterNCMarkers(document.getElementById('ncSearchInput').value);
     // Keep survey toggle visible
     ncUpdateSurveyToggle();
+    // Offer to resume an interrupted boundary drawing
+    if (typeof ncMaybeResumeDraft === 'function') ncMaybeResumeDraft();
 }
 
 // ============================================
