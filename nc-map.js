@@ -5,6 +5,8 @@ let ncMap = null;
 let ncMarkers = [];
 let ncProperties = [];
 let ncLabelsVisible = false;
+let ncBoundaryPolys = [];
+let ncDrawState = null; // active boundary-drawing session
 
 const NC_PROPERTY_JSON_URL = 'https://raw.githubusercontent.com/jalhf/New-Callisto-Property-Register/main/converted_properties.json';
 const NC_TYPE_COLORS = {
@@ -19,14 +21,14 @@ async function loadNewCallisto() {
         return;
     }
 
-    // Image overlay bounds: MC X [-4608, -512], Z [6144, 10240]
+    // Survey photo bounds: MC X [-4608, -512], Z [6144, 10240]
     // Leaflet CRS.Simple: lat = -MC_Z, lng = MC_X
     const ncBounds = [[-10240, -4608], [-6144, -512]]; // [[south,west],[north,east]]
 
     ncMap = L.map('ncMap', {
         crs: L.CRS.Simple,
         minZoom: -3,
-        maxZoom: 3,
+        maxZoom: 5,
         zoomSnap: 0.5,
         zoomDelta: 1,
         attributionControl: false,
@@ -36,7 +38,31 @@ async function loadNewCallisto() {
         maxBoundsViscosity: 0.8
     });
 
-    L.imageOverlay('nc-terrain.jpg', ncBounds).addTo(ncMap);
+    // CivMC community tiles (same server as the world map): z0 = 1px per block,
+    // tile x,y = floor(X/256), floor(Z/256) — lines up with lat=-Z/lng=X under
+    // CRS.Simple, so the stock tile layer needs no custom projection. Zooming
+    // past 0 upscales the native tiles (pixelated CSS keeps block edges crisp).
+    const ncTileLayer = (layer) => L.tileLayer(
+        `https://civmc-map.duckdns.org/tiles/${layer}/z{z}/{x},{y}.png`, {
+        minZoom: -3,
+        maxZoom: 5,
+        minNativeZoom: -3,
+        maxNativeZoom: 0,
+        tileSize: 256,
+        noWrap: true,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        keepBuffer: 4
+    });
+
+    const ncTerrain = ncTileLayer('terrain').addTo(ncMap);
+    L.control.layers({
+        'Terrain': ncTerrain,
+        'Topographic': ncTileLayer('topo'),
+        'Biomes': ncTileLayer('biome'),
+        'Server Launch': ncTileLayer('sotw'),
+        'Survey Photo': L.imageOverlay('nc-terrain.jpg', ncBounds)
+    }, null, { position: 'topleft' }).addTo(ncMap);
 
     // Center on New Callisto — lat = -minecraft_z, lng = minecraft_x
     ncMap.setView([-8227, -3268], 0);
@@ -53,7 +79,7 @@ async function loadNewCallisto() {
 
     // Double-click to create new property row in spreadsheet (admin/surveyor only)
     ncMap.on('dblclick', (e) => {
-        if (ncShopMode) return;
+        if (ncShopMode || ncDrawState) return;
         if (!ncCanEdit()) return;
         const mcX = Math.round(e.latlng.lng);
         const mcZ = Math.round(-e.latlng.lat);
@@ -261,6 +287,35 @@ async function loadNewCallisto() {
         if (fineBtn) {
             const pi = parseInt(fineBtn.dataset.pi);
             fineBtn.addEventListener('click', () => { ncMap.closePopup(); ncShowFineLog(ncProperties[pi]); });
+        }
+
+        // --- Boundary draw/remove (admin/surveyor) ---
+        const drawBtn = container.querySelector('.nc-popup-draw-btn');
+        if (drawBtn) {
+            const pi = parseInt(drawBtn.dataset.pi);
+            drawBtn.addEventListener('click', () => ncStartDrawBoundary(pi));
+        }
+        const boundaryRemoveBtn = container.querySelector('.nc-popup-boundary-remove');
+        if (boundaryRemoveBtn) {
+            boundaryRemoveBtn.addEventListener('click', async () => {
+                const pi = parseInt(boundaryRemoveBtn.dataset.pi);
+                const prop = ncProperties[pi];
+                if (!prop?.id) return;
+                if (!confirm(`Remove boundary for ${prop.name || 'this property'}?`)) return;
+                try {
+                    const now = new Date().toISOString();
+                    await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+                        method: 'PATCH', headers: restHeaders(),
+                        body: JSON.stringify({ boundary: null, updated_at: now })
+                    });
+                    if (typeof ncLogChange === 'function') ncLogChange(prop.id, 'boundary', `${prop.boundary?.length || 0} corners`, 'removed');
+                    prop.boundary = null;
+                    ncMap.closePopup();
+                    renderNCMarkers(ncProperties);
+                } catch (err) {
+                    console.error('Failed to remove boundary:', err);
+                }
+            });
         }
 
         // --- Admin/surveyor only: image upload, dropdowns, inline editing ---
@@ -685,6 +740,11 @@ function buildPopupHTML(prop, canEdit, pi) {
         h += `<button class="nc-popup-edit-btn nc-popup-txn-btn" data-pi="${pi}">Transaction Log</button>`;
         h += `<button class="nc-popup-edit-btn nc-popup-log-btn" data-pi="${pi}">Surveyor's Log</button>`;
         h += `<button class="nc-popup-edit-btn nc-popup-fine-btn" data-pi="${pi}">Fine Log</button>`;
+        if (prop.id) {
+            const hasBoundary = Array.isArray(prop.boundary) && prop.boundary.length >= 3;
+            h += `<button class="nc-popup-edit-btn nc-popup-draw-btn" data-pi="${pi}">${hasBoundary ? 'Redraw Boundary' : 'Draw Boundary'}</button>`;
+            if (hasBoundary) h += `<button class="nc-popup-edit-btn nc-popup-boundary-remove" data-pi="${pi}">Remove Boundary</button>`;
+        }
     }
     h += `</div></div></div>`;
     return h;
@@ -693,6 +753,23 @@ function buildPopupHTML(prop, canEdit, pi) {
 function renderNCMarkers(properties) {
     ncMarkers.forEach(m => ncMap.removeLayer(m));
     ncMarkers = [];
+    ncBoundaryPolys.forEach(p => ncMap.removeLayer(p));
+    ncBoundaryPolys = [];
+
+    // Boundary polygons first so they sit under the marker dots
+    properties.forEach((prop, pi) => {
+        if (!Array.isArray(prop.boundary) || prop.boundary.length < 3) return;
+        const color = NC_TYPE_COLORS[prop.type] || prop.color || '#888';
+        const poly = L.polygon(prop.boundary.map(([x, z]) => [-z, x]), {
+            color, weight: 2, opacity: 0.75, fillColor: color, fillOpacity: 0.12
+        }).addTo(ncMap);
+        poly._ncIndex = pi;
+        poly.on('click', () => {
+            const m = ncMarkers.find(mk => mk._ncIndex === pi);
+            if (m && ncMap.hasLayer(m)) m.openPopup();
+        });
+        ncBoundaryPolys.push(poly);
+    });
 
     properties.forEach((prop, pi) => {
         if (prop.x == null || prop.z == null) return;
@@ -723,6 +800,145 @@ function renderNCMarkers(properties) {
         ncMarkers.push(marker);
     });
 }
+
+// ============================================
+// Boundary Drawing (admin/surveyor)
+// Click to place corners (snapped to block corners), right-click to undo,
+// click the first corner / Enter to finish, Esc to cancel.
+// ============================================
+function ncStartDrawBoundary(pi) {
+    const prop = ncProperties[pi];
+    if (!prop?.id) { alert('Save the property first, then draw its boundary.'); return; }
+    if (ncDrawState) ncTeardownDraw();
+    ncMap.closePopup();
+    ncDrawState = {
+        pi,
+        pts: [],       // [[x, z], ...] block corners
+        group: L.layerGroup().addTo(ncMap),
+        rubber: null   // dashed line from last corner to cursor
+    };
+    document.getElementById('ncMap').classList.add('nc-drawing');
+    document.getElementById('ncDrawHint').style.display = 'flex';
+    ncUpdateDrawHint();
+    ncMap.on('click', ncDrawAddPoint);
+    ncMap.on('mousemove', ncDrawMouseMove);
+    ncMap.on('contextmenu', ncDrawUndoPoint);
+    document.addEventListener('keydown', ncDrawKeydown);
+}
+
+function ncDrawAddPoint(e) {
+    const st = ncDrawState;
+    if (!st) return;
+    const x = Math.round(e.latlng.lng);
+    const z = Math.round(-e.latlng.lat);
+    // Clicking near the first corner closes the shape
+    if (st.pts.length >= 3) {
+        const firstPx = ncMap.latLngToContainerPoint([-st.pts[0][1], st.pts[0][0]]);
+        const clickPx = ncMap.latLngToContainerPoint(e.latlng);
+        if (firstPx.distanceTo(clickPx) < 12) { ncFinishDrawBoundary(); return; }
+    }
+    const last = st.pts[st.pts.length - 1];
+    if (last && last[0] === x && last[1] === z) return; // dblclick double-fire
+    st.pts.push([x, z]);
+    ncDrawRedraw();
+    ncUpdateDrawHint();
+}
+
+function ncDrawMouseMove(e) {
+    const st = ncDrawState;
+    if (!st || !st.pts.length) return;
+    const last = st.pts[st.pts.length - 1];
+    const path = [[-last[1], last[0]], e.latlng];
+    if (st.rubber) st.rubber.setLatLngs(path);
+    else st.rubber = L.polyline(path, { color: '#fff', weight: 1.5, opacity: 0.5, dashArray: '4 4', interactive: false }).addTo(st.group);
+}
+
+function ncDrawUndoPoint() {
+    const st = ncDrawState;
+    if (!st || !st.pts.length) return;
+    st.pts.pop();
+    ncDrawRedraw();
+    ncUpdateDrawHint();
+}
+
+function ncDrawKeydown(e) {
+    if (!ncDrawState) return;
+    if (e.key === 'Enter') { e.preventDefault(); ncFinishDrawBoundary(); }
+    else if (e.key === 'Escape') { e.preventDefault(); ncTeardownDraw(); }
+}
+
+function ncDrawRedraw() {
+    const st = ncDrawState;
+    if (!st) return;
+    st.group.clearLayers();
+    st.rubber = null;
+    const latlngs = st.pts.map(([x, z]) => [-z, x]);
+    if (latlngs.length >= 2) {
+        L.polyline(latlngs, { color: '#fff', weight: 2, opacity: 0.9, interactive: false }).addTo(st.group);
+    }
+    if (latlngs.length >= 3) {
+        L.polyline([latlngs[latlngs.length - 1], latlngs[0]], { color: '#fff', weight: 1.5, opacity: 0.4, dashArray: '4 4', interactive: false }).addTo(st.group);
+    }
+    latlngs.forEach((ll, i) => {
+        L.circleMarker(ll, {
+            radius: i === 0 ? 6 : 4,
+            color: '#fff', weight: 1.5,
+            fillColor: i === 0 ? '#4caf50' : '#183dde',
+            fillOpacity: 1, interactive: false
+        }).addTo(st.group);
+    });
+}
+
+function ncUpdateDrawHint(msg) {
+    const textEl = document.getElementById('ncDrawHintText');
+    const finishBtn = document.getElementById('ncDrawFinish');
+    if (!textEl) return;
+    const n = ncDrawState?.pts.length || 0;
+    if (msg) textEl.textContent = msg;
+    else if (n < 3) textEl.textContent = `Click the map to trace corners (${n} placed, 3 minimum)`;
+    else textEl.textContent = `${n} corners — click the first corner or press Enter to finish`;
+    if (finishBtn) finishBtn.disabled = n < 3;
+}
+
+async function ncFinishDrawBoundary() {
+    const st = ncDrawState;
+    if (!st) return;
+    if (st.pts.length < 3) { ncUpdateDrawHint('Need at least 3 corners to close the boundary'); return; }
+    const prop = ncProperties[st.pi];
+    const pts = st.pts;
+    const hadBoundary = Array.isArray(prop.boundary) && prop.boundary.length >= 3;
+    ncTeardownDraw();
+    try {
+        const now = new Date().toISOString();
+        await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
+            method: 'PATCH', headers: restHeaders(),
+            body: JSON.stringify({ boundary: pts, last_surveyed: now, updated_at: now })
+        });
+        if (typeof ncLogChange === 'function') ncLogChange(prop.id, 'boundary', hadBoundary ? 'redrawn' : null, `${pts.length} corners`);
+        prop.boundary = pts;
+        prop.last_surveyed = now;
+        renderNCMarkers(ncProperties);
+    } catch (err) {
+        console.error('Failed to save boundary:', err);
+        alert('Failed to save boundary — check the console.');
+    }
+}
+
+function ncTeardownDraw() {
+    const st = ncDrawState;
+    ncDrawState = null;
+    if (st?.group) ncMap.removeLayer(st.group);
+    document.getElementById('ncMap').classList.remove('nc-drawing');
+    document.getElementById('ncDrawHint').style.display = 'none';
+    ncMap.off('click', ncDrawAddPoint);
+    ncMap.off('mousemove', ncDrawMouseMove);
+    ncMap.off('contextmenu', ncDrawUndoPoint);
+    document.removeEventListener('keydown', ncDrawKeydown);
+}
+
+document.getElementById('ncDrawFinish').addEventListener('click', ncFinishDrawBoundary);
+document.getElementById('ncDrawUndo').addEventListener('click', ncDrawUndoPoint);
+document.getElementById('ncDrawCancel').addEventListener('click', ncTeardownDraw);
 
 function ncToggleLabels() {
     ncLabelsVisible = !ncLabelsVisible;
@@ -918,6 +1134,14 @@ function filterNCMarkers(query) {
             visible++;
         } else {
             ncMap.removeLayer(marker);
+        }
+    });
+    // Boundary polygons follow their property's visibility
+    ncBoundaryPolys.forEach(poly => {
+        if (visibleIndices.has(String(poly._ncIndex))) {
+            if (!ncMap.hasLayer(poly)) poly.addTo(ncMap);
+        } else {
+            ncMap.removeLayer(poly);
         }
     });
     // Remove infinite-scroll clones so only originals remain

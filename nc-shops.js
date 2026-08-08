@@ -349,10 +349,13 @@ function ncGetLinkedProperty(link) {
 function ncEnterShopMode() {
     ncShopMode = true;
     document.getElementById('ncModeToggle').textContent = 'View Registry';
+    // Cancel any in-progress boundary drawing
+    if (typeof ncTeardownDraw === 'function' && ncDrawState) ncTeardownDraw();
     // Hide registrar UI
     document.querySelectorAll('.nc-registrar-ui').forEach(el => el.style.display = 'none');
-    // Hide property markers
+    // Hide property markers + boundaries
     ncMarkers.forEach(m => ncMap.removeLayer(m));
+    ncBoundaryPolys.forEach(p => ncMap.removeLayer(p));
     // Show shop UI
     document.querySelectorAll('.nc-shop-ui').forEach(el => el.style.display = 'flex');
     // Show survey toggle for surveyors/admins
