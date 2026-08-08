@@ -68,7 +68,7 @@ async function loadNewCallisto() {
         tileSize: 256,
         noWrap: true,
         zIndex: 2,
-        bounds: [[-10752, -4608], [-6144, 0]],
+        bounds: [[-9216, -6656], [512, 8704]],
         errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
     }).addTo(ncMap);
 

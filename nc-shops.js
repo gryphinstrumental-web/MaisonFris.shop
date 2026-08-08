@@ -2708,6 +2708,23 @@ function worldMapInit() {
         keepBuffer: 6
     }).addTo(worldMap);
 
+    // Fresh Survey overlay — locally generated JourneyMap tiles (tools/generate-nc-tiles.ps1).
+    // Transparent where unexplored, so the CivMC base shows through.
+    L.tileLayer('tiles/nc/z{z}/{x},{y}.png', {
+        minZoom: -5,
+        maxZoom: 3,
+        minNativeZoom: -3,
+        maxNativeZoom: 0,
+        tileSize: 256,
+        noWrap: true,
+        zIndex: 2,
+        bounds: [[-9216, -6656], [512, 8704]],
+        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        keepBuffer: 6
+    }).addTo(worldMap);
+
     worldMap.setView(worldMapMcToLatLng(0, 0), -3);
 
     worldMapCityLabels = [];

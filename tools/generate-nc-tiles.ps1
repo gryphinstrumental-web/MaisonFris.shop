@@ -4,16 +4,17 @@
 # <regionX>,<regionZ>.png. Site tiles are 256x256 px: z0 = 1px/block, each level
 # down halves the scale — same scheme as the CivMC community tiles the map already uses.
 #
-# To update the map: walk around New Callisto in-game with JourneyMap running, then
+# To update the map: walk around in-game with JourneyMap running, then
 #   powershell -File tools\generate-nc-tiles.ps1
-# and commit the regenerated tiles/nc/ folder (bump nc-map.js ?v= if it changed).
+# and commit the regenerated tiles/nc/ folder. Includes every surveyed region
+# (used by both the NC registry map and the terminal world map overlays).
 
 param(
     [string]$JmDay = "$env:APPDATA\.minecraft\journeymap\data\mp\civmc\overworld\day",
     [string]$OutDir = (Join-Path $PSScriptRoot '..\tiles\nc'),
-    # NC area in 512-block region coords (X -9..-1, Z 12..20 = blocks X -4608..0, Z 6144..10752)
-    [int]$RegionMinX = -9, [int]$RegionMaxX = -1,
-    [int]$RegionMinZ = 12, [int]$RegionMaxZ = 20,
+    # 512-block region coords to include (default: everything surveyed)
+    [int]$RegionMinX = -100, [int]$RegionMaxX = 100,
+    [int]$RegionMinZ = -100, [int]$RegionMaxZ = 100,
     [int]$MinZoom = -3
 )
 
