@@ -56,13 +56,29 @@ async function loadNewCallisto() {
     });
 
     const ncTerrain = ncTileLayer('terrain').addTo(ncMap);
+
+    // Fresh Survey overlay — generated from local JourneyMap data by
+    // tools/generate-nc-tiles.ps1. Transparent where unexplored, so the
+    // (older) CivMC base map shows through outside surveyed areas.
+    const ncFreshSurvey = L.tileLayer('tiles/nc/z{z}/{x},{y}.png', {
+        minZoom: -3,
+        maxZoom: 5,
+        minNativeZoom: -3,
+        maxNativeZoom: 0,
+        tileSize: 256,
+        noWrap: true,
+        zIndex: 2,
+        bounds: [[-10752, -4608], [-6144, 0]],
+        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+    }).addTo(ncMap);
+
     L.control.layers({
         'Terrain': ncTerrain,
         'Topographic': ncTileLayer('topo'),
         'Biomes': ncTileLayer('biome'),
         'Server Launch': ncTileLayer('sotw'),
         'Survey Photo': L.imageOverlay('nc-terrain.jpg', ncBounds)
-    }, null, { position: 'topleft' }).addTo(ncMap);
+    }, { 'Fresh Survey': ncFreshSurvey }, { position: 'topleft' }).addTo(ncMap);
 
     // Center on New Callisto — lat = -minecraft_z, lng = minecraft_x
     ncMap.setView([-8227, -3268], 0);
