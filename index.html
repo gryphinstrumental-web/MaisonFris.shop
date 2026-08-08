@@ -1295,7 +1295,13 @@
             image-rendering: pixelated;
         }
 
-        /* Base-layer switcher (top-left) — match site theme */
+        /* Layer switcher: middle-left, clear of the nav menu button */
+        #ncMap .leaflet-top.leaflet-left {
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* Base-layer switcher — match site theme */
         #ncMap .leaflet-control-layers {
             background: rgba(30, 30, 50, 0.85);
             backdrop-filter: blur(6px);
