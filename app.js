@@ -189,6 +189,61 @@ function navigate() {
 window.addEventListener('popstate', navigate);
 
 // ============================================
+// Auto-refresh on deploy — polls the site's own ETag and reloads when a
+// new version is published (GitHub Pages changes it on every deploy).
+// Defers while there is unsaved work (boundary drawing / table edits).
+// ============================================
+(function autoRefreshOnDeploy() {
+    const CHECK_MS = 5 * 60 * 1000;
+    let knownTag = null;
+    let pendingReload = false;
+
+    function unsavedWork() {
+        if (typeof ncDrawState !== 'undefined' && ncDrawState) return true;
+        if (typeof ncEditMode !== 'undefined' && ncEditMode &&
+            typeof ncHasUnsaved !== 'undefined' && ncHasUnsaved) return true;
+        return false;
+    }
+
+    function toast(msg) {
+        const el = document.createElement('div');
+        el.textContent = msg;
+        el.style.cssText = 'position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(30,30,50,0.95);color:#e8e6f0;border:1px solid rgba(184,180,204,0.35);border-radius:6px;padding:0.55rem 1rem;font-family:Raleway,sans-serif;font-size:0.8rem;letter-spacing:0.03em;';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+
+    function scheduleReload() {
+        if (unsavedWork()) {
+            if (pendingReload) return;
+            pendingReload = true;
+            toast('Site updated — will refresh once your edits are done');
+            const wait = setInterval(() => {
+                if (!unsavedWork()) { clearInterval(wait); location.reload(); }
+            }, 15000);
+            return;
+        }
+        if (document.hidden) { location.reload(); return; }
+        toast('Updating to the latest version…');
+        setTimeout(() => location.reload(), 1500);
+    }
+
+    async function check() {
+        try {
+            const resp = await fetch('/index.html', { method: 'HEAD', cache: 'no-store' });
+            const tag = resp.headers.get('etag') || resp.headers.get('last-modified');
+            if (!tag) return;
+            if (knownTag === null) { knownTag = tag; return; }
+            if (tag !== knownTag) { knownTag = tag; scheduleReload(); }
+        } catch (e) { /* offline — try again next cycle */ }
+    }
+
+    setInterval(check, CHECK_MS);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    check();
+})();
+
+// ============================================
 // Auth
 // ============================================
 async function checkAdmin() {
