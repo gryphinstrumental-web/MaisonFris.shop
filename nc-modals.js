@@ -353,10 +353,6 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         // Update property: value, owner (buyer becomes new owner), optionally name
         const updates = { appraised_value: amount, owner: buyer, updated_at: new Date().toISOString() };
         if (rename) updates.name = rename;
-        // Initialize trust deposit for new owner of commercial/mixed-use properties (60d deposit - 10d fee = 50d)
-        if (prop.type === 'Commercial') {
-            updates.trust_deposit = 50;
-        }
 
         await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
             method: 'PATCH', headers: restHeaders(), body: JSON.stringify(updates)
@@ -367,16 +363,12 @@ document.getElementById('ncTxnSaveBtn').addEventListener('click', async () => {
         if (prop.owner !== buyer) changes.push({ field: 'owner', oldVal: prop.owner, newVal: buyer });
         if (prop.appraised_value !== amount) changes.push({ field: 'appraised_value', oldVal: prop.appraised_value, newVal: amount });
         if (rename && rename !== prop.name) changes.push({ field: 'name', oldVal: prop.name, newVal: rename });
-        if ((prop.type === 'Commercial') && prop.trust_deposit !== 50) {
-            changes.push({ field: 'trust_deposit', oldVal: prop.trust_deposit, newVal: 50 });
-        }
         if (changes.length > 0) ncLogMultipleChanges(prop.id, changes);
 
         // Update local data
         prop.owner = buyer;
         prop.appraised_value = amount;
         if (rename) prop.name = rename;
-        if (prop.type === 'Commercial') prop.trust_deposit = 50;
 
         // Refresh UI
         ncRefreshAll();
@@ -552,17 +544,6 @@ document.getElementById('ncFineSaveBtn').addEventListener('click', async () => {
             ncEditingFineId = null;
         } else {
             await supabaseInsert('nc_fines', fineData);
-            // Deduct from trust_deposit (skip if waived)
-            const oldTrust = prop.trust_deposit ?? 0;
-            if (oldTrust !== -1) {
-                const newTrust = Math.max(0, oldTrust - amount);
-                await fetch(`${CONFIG.supabaseUrl}/rest/v1/nc_properties?id=eq.${prop.id}`, {
-                    method: 'PATCH', headers: restHeaders(),
-                    body: JSON.stringify({ trust_deposit: newTrust, updated_at: new Date().toISOString() })
-                });
-                ncLogChange(prop.id, 'trust_deposit', oldTrust, newTrust);
-                prop.trust_deposit = newTrust;
-            }
             ncRefreshAll();
         }
         await ncShowFineLog(prop);

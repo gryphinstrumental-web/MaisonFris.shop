@@ -1,7 +1,7 @@
 
 // Table view
 let ncTableSort = { col: null, asc: true };
-const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_account', 'trust_deposit', 'appraised_value', 'tenant', 'type', 'status', 'signage', 'shopchests', 'historic', 'last_surveyed', 'x', 'z'];
+const NC_TABLE_COLS = ['name', 'address', 'owner', 'discord_contact', 'hs_account', 'appraised_value', 'tenant', 'type', 'status', 'signage', 'shopchests', 'historic', 'last_surveyed', 'x', 'z'];
 const NC_STATUS_COLORS = { 'Good Standing': '#4caf50', 'Warning': '#e6a817', 'Derelict': '#e04040' };
 let ncDirtyRows = new Set(); // track modified property ids/indices for save
 let ncVisibleCols = new Set(NC_TABLE_COLS); // all visible by default
@@ -65,7 +65,7 @@ function renderNCTable(properties, filter = '') {
         thead.innerHTML = '';
         // Locate column first (far left)
         const locTh = document.createElement('th'); locTh.textContent = ''; thead.appendChild(locTh);
-        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', trust_deposit: 'Trust', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', historic: 'Protected', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
+        const labels = { name: 'Name', address: 'Address', owner: 'Owner', tenant: 'Tenant', discord_contact: 'Discord', hs_account: 'Bank', appraised_value: 'Value', type: 'Type', status: 'Status', signage: 'Signage', shopchests: 'Shopchests', historic: 'Protected', last_surveyed: 'Surveyed', x: 'X', z: 'Z' };
         NC_TABLE_COLS.forEach((col, ci) => {
             const th = document.createElement('th');
             if (!ncVisibleCols.has(col)) { th.style.display = 'none'; }
@@ -150,7 +150,6 @@ function renderNCTable(properties, filter = '') {
             <td data-field="owner"${vis('owner')}>${ncEsc(prop.owner)}</td>
             <td data-field="discord_contact"${vis('discord_contact')}>${ncEsc(prop.discord_contact)}</td>
             <td data-field="hs_account"${vis('hs_account')}>${ncEsc(prop.hs_account)}</td>
-            <td data-field="trust_deposit"${vis('trust_deposit')}>${(prop.type === 'Commercial') ? ((prop.trust_deposit === -1) ? '<span style="color:var(--text-muted);font-style:italic;">Waived</span>' : `<span style="color:${(prop.trust_deposit ?? 0) >= 50 ? '#4caf50' : (prop.trust_deposit ?? 0) > 0 ? '#e6a817' : '#e04040'}">${prop.trust_deposit ?? 0}d</span>`) : '<span style="color:var(--text-muted);">—</span>'}</td>
             <td data-field="appraised_value"${vis('appraised_value')}>${prop.appraised_value != null ? prop.appraised_value : ''}</td>
             <td data-field="tenant"${vis('tenant')}>${ncEsc(prop.tenant)}</td>
             <td data-field="type"${vis('type')}>${prop.type ? `<span class="nc-table-type" style="background:${tc};">${ncEsc(prop.type)}</span>` : ''}</td>
@@ -295,21 +294,6 @@ function renderNCTable(properties, filter = '') {
                     inp.value = prop[field] ? prop[field].slice(0, 10) : '';
                     inp.addEventListener('change', () => {
                         prop[field] = inp.value || null;
-                        markDirty();
-                    });
-                    td.appendChild(inp);
-                    return;
-                }
-                // Trust deposit gets number input
-                if (field === 'trust_deposit') {
-                    td.innerHTML = '';
-                    const inp = document.createElement('input');
-                    inp.type = 'number';
-                    inp.className = 'nc-num-input';
-                    inp.value = prop.trust_deposit ?? '';
-                    inp.placeholder = '0';
-                    inp.addEventListener('change', () => {
-                        prop.trust_deposit = inp.value ? Number(inp.value) : null;
                         markDirty();
                     });
                     td.appendChild(inp);
@@ -669,7 +653,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
         const editBtn = document.getElementById('ncEditToggleBtn');
         editBtn.textContent = 'Saving...';
         editBtn.disabled = true;
-        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'trust_deposit', 'type', 'status', 'signage', 'shopchests', 'historic', 'hs_account', 'last_surveyed', 'x', 'z', 'image_url'];
+        const logFields = ['name', 'address', 'owner', 'tenant', 'discord_contact', 'appraised_value', 'type', 'status', 'signage', 'shopchests', 'historic', 'hs_account', 'last_surveyed', 'x', 'z', 'image_url'];
         try {
             for (const idx of ncDirtyRows) {
                 const prop = ncProperties[idx];
@@ -682,7 +666,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
                     sale_link: prop.sale_link || null, appraised_value: prop.appraised_value || null,
                     status: prop.status || null, last_surveyed: prop.last_surveyed || null,
                     signage: prop.signage || false, shopchests: prop.shopchests || false, historic: prop.historic || false,
-                    hs_account: prop.hs_account || null, trust_deposit: prop.trust_deposit ?? 0,
+                    hs_account: prop.hs_account || null,
                     image_url: prop.image_url || null, updated_at: new Date().toISOString()
                 };
                 const isNew = !prop.id;
@@ -741,7 +725,7 @@ document.getElementById('ncEditToggleBtn').addEventListener('click', async () =>
 document.getElementById('ncAddRowBtn').addEventListener('click', () => {
     if (!ncEditMode) return;
     ncProperties.push({ name: 'New Property', type: 'Residential', address: '', owner: '', tenant: null, discord_contact: null, x: 0, z: 0, color: '#888',
-        appraised_value: null, status: 'Good Standing', last_surveyed: null, image_url: null, trust_deposit: 0 });
+        appraised_value: null, status: 'Good Standing', last_surveyed: null, image_url: null });
     ncHasUnsaved = true;
     ncDirtyRows.add(ncProperties.length - 1);
     renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
@@ -766,8 +750,8 @@ document.getElementById('ncDeleteRowBtn').addEventListener('click', async () => 
 
 // Export — shared data for CSV and Excel
 function ncExportData() {
-    const headers = ['Name', 'Address', 'Owner', 'Tenant', 'Discord Contact', 'Bank', 'Trust Deposit', 'Appraised Value', 'Type', 'Status', 'Signage', 'Shopchests', 'Last Surveyed', 'X', 'Z', 'Image URL'];
-    const rows = ncProperties.map(p => [p.name, p.address, p.owner, p.tenant, p.discord_contact, p.hs_account, p.trust_deposit, p.appraised_value, p.type, p.status, p.signage, p.shopchests, p.last_surveyed, p.x, p.z, p.image_url]);
+    const headers = ['Name', 'Address', 'Owner', 'Tenant', 'Discord Contact', 'Bank', 'Appraised Value', 'Type', 'Status', 'Signage', 'Shopchests', 'Last Surveyed', 'X', 'Z', 'Image URL'];
+    const rows = ncProperties.map(p => [p.name, p.address, p.owner, p.tenant, p.discord_contact, p.hs_account, p.appraised_value, p.type, p.status, p.signage, p.shopchests, p.last_surveyed, p.x, p.z, p.image_url]);
     return { headers, rows };
 }
 

@@ -110,7 +110,7 @@ async function loadNewCallisto() {
         // Add new row with coordinates pre-filled
         ncProperties.push({ name: 'New Property', type: 'Residential', address: '', owner: '',
             tenant: null, discord_contact: null, x: mcX, z: mcZ, color: '#888',
-            appraised_value: null, status: 'Good Standing', last_surveyed: null, image_url: null, trust_deposit: 0 });
+            appraised_value: null, status: 'Good Standing', last_surveyed: null, image_url: null });
         ncHasUnsaved = true;
         ncDirtyRows.add(ncProperties.length - 1);
         ncUpdateToolbar();
@@ -519,7 +519,7 @@ async function loadNewCallisto() {
                         saved = true;
                         input._changed = false;
                         const rawVal = input.value.trim();
-                        const newVal = (field === 'trust_deposit' || field === 'appraised_value') ? (rawVal ? Number(rawVal) : null) : rawVal;
+                        const newVal = (field === 'appraised_value') ? (rawVal ? Number(rawVal) : null) : rawVal;
                         if (String(newVal ?? '') === String(oldVal ?? '')) return;
                         input._changed = true;
                         prop[field] = newVal;
