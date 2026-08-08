@@ -741,12 +741,19 @@ document.getElementById('ncDeleteRowBtn').addEventListener('click', async () => 
     renderNCTable(ncProperties, document.getElementById('ncTableSearch').value);
 });
 
+// Export — shared data for CSV and Excel
+function ncExportData() {
+    const headers = ['Name', 'Address', 'Owner', 'Tenant', 'Discord Contact', 'Bank', 'Trust Deposit', 'Appraised Value', 'Type', 'Status', 'Signage', 'Shopchests', 'Last Surveyed', 'X', 'Z', 'Image URL'];
+    const rows = ncProperties.map(p => [p.name, p.address, p.owner, p.tenant, p.discord_contact, p.hs_account, p.trust_deposit, p.appraised_value, p.type, p.status, p.signage, p.shopchests, p.last_surveyed, p.x, p.z, p.image_url]);
+    return { headers, rows };
+}
+
 // Export CSV
 document.getElementById('ncExportBtn').addEventListener('click', () => {
-    const headers = ['Name', 'Address', 'Owner', 'Tenant', 'Discord Contact', 'Bank', 'Trust Deposit', 'Appraised Value', 'Type', 'Status', 'Signage', 'Shopchests', 'Last Surveyed', 'X', 'Z', 'Image URL'];
+    const { headers, rows } = ncExportData();
     const csvRows = [headers.join(',')];
-    ncProperties.forEach(p => {
-        csvRows.push([p.name, p.address, p.owner, p.tenant, p.discord_contact, p.hs_account, p.trust_deposit, p.appraised_value, p.type, p.status, p.signage, p.shopchests, p.last_surveyed, p.x, p.z, p.image_url].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
+    rows.forEach(r => {
+        csvRows.push(r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
     });
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -754,6 +761,43 @@ document.getElementById('ncExportBtn').addEventListener('click', () => {
     a.download = 'new-callisto-properties.csv';
     a.click();
     URL.revokeObjectURL(a.href);
+});
+
+// Export Excel — SheetJS is loaded from CDN on first use only
+let ncXlsxLoading = null;
+function ncLoadSheetJS() {
+    if (window.XLSX) return Promise.resolve();
+    if (!ncXlsxLoading) {
+        ncXlsxLoading = new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+            s.onload = resolve;
+            s.onerror = () => { ncXlsxLoading = null; reject(new Error('Failed to load Excel library')); };
+            document.head.appendChild(s);
+        });
+    }
+    return ncXlsxLoading;
+}
+
+document.getElementById('ncExportXlsxBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('ncExportXlsxBtn');
+    btn.disabled = true;
+    try {
+        await ncLoadSheetJS();
+        const { headers, rows } = ncExportData();
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows.map(r => r.map(v => v == null ? '' : v))]);
+        ws['!cols'] = headers.map((h, i) => ({
+            wch: Math.min(40, Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length)) + 2)
+        }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Properties');
+        XLSX.writeFile(wb, 'new-callisto-properties.xlsx');
+    } catch (err) {
+        console.error('Excel export failed:', err);
+        alert('Excel export failed — check your connection and try again.');
+    } finally {
+        btn.disabled = false;
+    }
 });
 
 // Unsaved changes guard — table close button
