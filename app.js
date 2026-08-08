@@ -139,7 +139,7 @@ function navigate() {
     } else if (path === '/new-callisto') {
         document.getElementById('newCallistoView').classList.add('active');
         document.body.classList.remove('landing');
-        setTimeout(() => { loadNewCallisto().then(() => { if (!ncShopMode) ncEnterShopMode(); }); }, 100);
+        setTimeout(() => loadNewCallisto(), 100);
     } else if (path === '/usermanagement') {
         if (!currentUser || !isAdmin) {
             history.replaceState(null, '', '/home');
@@ -178,9 +178,11 @@ function navigate() {
         document.getElementById('landingView').classList.add('active');
         document.body.classList.add('landing');
     } else {
-        history.replaceState(null, '', '/home');
-        document.getElementById('landingView').classList.add('active');
-        document.body.classList.add('landing');
+        // Default view: the New Callisto registry
+        history.replaceState(null, '', '/new-callisto');
+        document.getElementById('newCallistoView').classList.add('active');
+        document.body.classList.remove('landing');
+        setTimeout(() => loadNewCallisto(), 100);
     }
 }
 
